@@ -11,12 +11,11 @@
   ],
   "routes": [
     {
-      "src": "/api/(.*)",
-      "dest": "/admin-panel/api/$1"
+      "handle": "filesystem"
     },
     {
       "src": "/(.*)",
-      "dest": "/admin-panel/dist/index.html"
+      "dest": "/index.html"
     }
   ]
 } 
