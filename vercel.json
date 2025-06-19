@@ -1,18 +1,17 @@
 {
   "version": 2,
+  "name": "hr-admin",
   "builds": [
     {
       "src": "admin-panel/package.json",
       "use": "@vercel/static-build",
       "config": {
-        "distDir": "admin-panel/dist"
+        "distDir": "dist"
       }
     }
   ],
   "routes": [
-    {
-      "src": "/(.*)",
-      "dest": "/admin-panel/dist/$1"
-    }
+    { "handle": "filesystem" },
+    { "src": "/(.*)", "dest": "/admin-panel/$1" }
   ]
 } 
