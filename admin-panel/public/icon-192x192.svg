@@ -1,0 +1,8 @@
+<svg width="192" height="192" viewBox="0 0 192 192" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="192" height="192" rx="24" fill="#2563eb"/>
+  <rect x="32" y="32" width="128" height="128" rx="16" fill="white"/>
+  <circle cx="72" cy="72" r="8" fill="#2563eb"/>
+  <circle cx="120" cy="72" r="8" fill="#2563eb"/>
+  <path d="M64 120h64v8H64v-8z" fill="#2563eb"/>
+  <text x="96" y="108" text-anchor="middle" fill="#2563eb" font-family="Arial" font-size="12" font-weight="bold">HR</text>
+</svg> 

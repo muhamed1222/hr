@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Test Telegram WebApp</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+            margin: 0;
+            padding: 16px;
+            background: var(--tg-theme-bg-color, #ffffff);
+            color: var(--tg-theme-text-color, #000000);
+            min-height: 100vh;
+        }
+        
+        .card {
+            background: #ffffff;
+            border-radius: 12px;
+            padding: 16px;
+            margin: 8px 0;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        
+        .card:active {
+            transform: scale(0.98);
+        }
+        
+        .card-content {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+        }
+        
+        .blue { background: #007aff; }
+        .green { background: #34c759; }
+        .orange { background: #ff9500; }
+        
+        .text-content h3 {
+            margin: 0;
+            font-weight: 600;
+            color: var(--tg-theme-text-color, #000000);
+        }
+        
+        .text-content p {
+            margin: 4px 0 0 0;
+            font-size: 14px;
+            color: var(--tg-theme-hint-color, #999999);
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 24px;
+        }
+        
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
+            font-weight: bold;
+        }
+        
+        .header p {
+            margin: 8px 0 0 0;
+            color: var(--tg-theme-hint-color, #999999);
+        }
+        
+        .status {
+            margin-top: 16px;
+            padding: 12px;
+            background: #f0f0f0;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🎉 Тест Telegram WebApp</h1>
+        <p>Проверка интеграции с HR системой</p>
+    </div>
+
+    <div class="card" onclick="showWorkLogForm()">
+        <div class="card-content">
+            <div class="icon blue">📝</div>
+            <div class="text-content">
+                <h3>Сдать отчёт</h3>
+                <p>Рабочий день завершён</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="card" onclick="showStats()">
+        <div class="card-content">
+            <div class="icon green">📊</div>
+            <div class="text-content">
+                <h3>Статистика</h3>
+                <p>Мои рабочие часы</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="card" onclick="showAbsence()">
+        <div class="card-content">
+            <div class="icon orange">🏖️</div>
+            <div class="text-content">
+                <h3>Отсутствие</h3>
+                <p>Отпуск или больничный</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="status" id="status">
+        <strong>Статус Telegram WebApp:</strong><br>
+        <span id="telegram-status">Проверяем...</span>
+    </div>
+
+    <script>
+        // Инициализация Telegram WebApp
+        let tg = window.Telegram.WebApp;
+        
+        function initTelegramApp() {
+            if (tg) {
+                tg.ready();
+                tg.expand();
+                
+                // Настройка цветов
+                tg.setHeaderColor('#1f2937');
+                tg.setBackgroundColor('#f9fafb');
+                
+                // Скрываем кнопки
+                tg.MainButton.hide();
+                tg.BackButton.hide();
+                
+                updateStatus();
+                
+                console.log('Telegram WebApp инициализировано:', {
+                    platform: tg.platform,
+                    version: tg.version,
+                    colorScheme: tg.colorScheme,
+                    user: tg.initDataUnsafe?.user
+                });
+            }
+        }
+        
+        function updateStatus() {
+            const statusEl = document.getElementById('telegram-status');
+            
+            if (tg && tg.initDataUnsafe?.user) {
+                const user = tg.initDataUnsafe.user;
+                statusEl.innerHTML = `
+                    ✅ Подключено<br>
+                    👤 Пользователь: ${user.first_name} ${user.last_name || ''}<br>
+                    🆔 ID: ${user.id}<br>
+                    📱 Платформа: ${tg.platform}<br>
+                    🎨 Тема: ${tg.colorScheme}
+                `;
+            } else if (tg) {
+                statusEl.innerHTML = `
+                    ⚠️ WebApp запущен, но нет данных пользователя<br>
+                    📱 Платформа: ${tg.platform || 'неизвестно'}<br>
+                    🎨 Тема: ${tg.colorScheme || 'неизвестно'}
+                `;
+            } else {
+                statusEl.innerHTML = `
+                    ❌ Telegram WebApp недоступен<br>
+                    Откройте в Telegram
+                `;
+            }
+        }
+        
+        function showWorkLogForm() {
+            if (tg?.HapticFeedback) {
+                tg.HapticFeedback.impactOccurred('light');
+            }
+            
+            if (tg?.showAlert) {
+                tg.showAlert('📝 Форма отчёта будет здесь!\n\nФункционал в разработке.');
+            } else {
+                alert('📝 Форма отчёта будет здесь!');
+            }
+        }
+        
+        function showStats() {
+            if (tg?.HapticFeedback) {
+                tg.HapticFeedback.impactOccurred('light');
+            }
+            
+            if (tg?.showConfirm) {
+                tg.showConfirm('📊 Показать статистику за эту неделю?', (confirmed) => {
+                    if (confirmed) {
+                        tg.showAlert('📈 40 часов на этой неделе\n📊 Успеваемость: 98%');
+                    }
+                });
+            } else {
+                alert('📊 Статистика в разработке!');
+            }
+        }
+        
+        function showAbsence() {
+            if (tg?.HapticFeedback) {
+                tg.HapticFeedback.impactOccurred('medium');
+            }
+            
+            if (tg?.showAlert) {
+                tg.showAlert('🏖️ Заявка на отсутствие\n\nСкоро будет доступна!');
+            } else {
+                alert('🏖️ Заявки в разработке!');
+            }
+        }
+        
+        // Инициализация при загрузке
+        document.addEventListener('DOMContentLoaded', initTelegramApp);
+        
+        // Обновление статуса каждые 2 секунды
+        setInterval(updateStatus, 2000);
+    </script>
+</body>
+</html> 
