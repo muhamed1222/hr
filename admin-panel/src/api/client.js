@@ -32,7 +32,26 @@ apiClient.interceptors.response.use(
     return response
   },
   (error) => {
-    if (error.response?.status === 401) {
+    // Проверяем тип ошибки и показываем соответствующее сообщение
+    if (error.code === 'ECONNREFUSED' || error.code === 'ERR_NETWORK' || !error.response) {
+      toast.error('❌ Сервер API недоступен. Бэкенд не развёрнут.', {
+        duration: 6000,
+        style: {
+          background: '#fef3c7',
+          color: '#92400e',
+          border: '1px solid #fbbf24'
+        }
+      })
+      console.warn('🔗 API недоступен:', API_BASE_URL)
+    } else if (error.response?.status === 404) {
+      toast.error('🔍 Эндпоинт API не найден', {
+        duration: 4000,
+        style: {
+          background: '#fef3c7',
+          color: '#92400e'
+        }
+      })
+    } else if (error.response?.status === 401) {
       localStorage.removeItem('token')
       localStorage.removeItem('user')
       window.location.href = '/login'

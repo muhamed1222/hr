@@ -11,9 +11,11 @@ import Dashboard from '@/pages/Dashboard'
 import TelegramAdmin from '@/pages/TelegramAdmin'
 import TelegramDemo from '@/components/TelegramDemo'
 import DeepLinkDemo from '@/components/DeepLinkDemo'
+import DeepLinkTester from '@/components/DeepLinkTester'
 import EmployeeProfile from '@/pages/EmployeeProfile'
 import WorkLogs from '@/pages/WorkLogs'
 import TelegramApp from '@/components/TelegramApp'
+import TelegramDeepLink from '@/components/TelegramDeepLink'
 import DevModeToggle, { DevModeFloatingToggle } from '@/components/DevModeToggle'
 import NotInTelegramNotice from '@/components/NotInTelegramNotice'
 import { WelcomeMessage } from '@/components/TelegramAuthStatus'
@@ -107,6 +109,7 @@ function App() {
     return (
       <QueryClientProvider client={queryClient}>
         <div className="App">
+          <TelegramDeepLink />
           <TelegramApp />
           <Toaster
             position="top-center"
@@ -128,6 +131,9 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <Router>
         <div className="App">
+          {/* Telegram Deep Link обработка */}
+          <TelegramDeepLink />
+          
           {/* Уведомление для браузерных пользователей */}
           <NotInTelegramNotice />
           
@@ -245,6 +251,7 @@ function App() {
                       {/* Dev Mode Toggle для разработчиков */}
                       <DevModeToggle />
                       
+                      <DeepLinkTester />
                       <DeepLinkDemo />
                       <TelegramDemo />
                     </div>

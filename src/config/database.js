@@ -7,7 +7,25 @@ const { debug } = require('../utils/logger');
 // Определяем конфигурацию в зависимости от типа БД
 let sequelize;
 
-if (process.env.DB_TYPE === 'sqlite') {
+if (process.env.DATABASE_URL) {
+  // Продакшн конфигурация с DATABASE_URL (Railway, Heroku и т.д.)
+  sequelize = new Sequelize(process.env.DATABASE_URL, {
+    dialect: 'postgres',
+    logging: process.env.NODE_ENV === 'development' ? (sql) => debug('SQL запрос (PostgreSQL)', { sql }) : false,
+    dialectOptions: {
+      ssl: process.env.NODE_ENV === 'production' ? {
+        require: true,
+        rejectUnauthorized: false
+      } : false
+    },
+    pool: {
+      max: 5,
+      min: 0,
+      acquire: 30000,
+      idle: 10000
+    }
+  });
+} else if (process.env.DB_TYPE === 'sqlite') {
   // SQLite конфигурация для быстрого тестирования
   sequelize = new Sequelize({
     dialect: 'sqlite',
@@ -15,7 +33,7 @@ if (process.env.DB_TYPE === 'sqlite') {
     logging: process.env.NODE_ENV === 'development' ? (sql) => debug('SQL запрос (SQLite)', { sql }) : false,
   });
 } else {
-  // PostgreSQL конфигурация для продакшна
+  // PostgreSQL конфигурация для локальной разработки
   sequelize = new Sequelize({
     host: process.env.DB_HOST,
     port: process.env.DB_PORT,

@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/Button'
 import { cn, getRoleText } from '@/lib/utils'
 import { isInsideTelegram, getTelegramUser } from '@/lib/telegram'
 import TelegramAuthStatus from '@/components/TelegramAuthStatus'
+import ApiStatus from '@/components/ApiStatus'
 import { 
   LayoutDashboard, 
   Users, 
@@ -122,6 +123,9 @@ export default function Layout({ children }) {
 
         {/* Контент */}
         <main className="flex-1 relative overflow-y-auto focus:outline-none">
+          {/* Статус API */}
+          <ApiStatus />
+          
           <div className="py-6">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
               {children}
