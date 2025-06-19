@@ -1,17 +1,12 @@
 {
   "version": 2,
-  "functions": {
-    "src/app.js": {
-      "runtime": "@vercel/node@2"
-    }
-  },
-  "routes": [
+  "builds": [
     {
-      "src": "/(.*)",
-      "dest": "src/app.js"
+      "src": "admin-panel/package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "dist"
+      }
     }
-  ],
-  "env": {
-    "NODE_ENV": "production"
-  }
+  ]
 } 

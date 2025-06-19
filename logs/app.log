@@ -667,3 +667,51 @@
 {"level":"info","message":"Система событий запущена и готова к работе","timestamp":"2025-06-19T11:18:19.124Z"}
 {"level":"info","message":"Планировщик напоминаний запущен","service":"cron","timestamp":"2025-06-19T11:18:19.172Z"}
 {"level":"info","message":"Планировщик напоминаний инициализирован","service":"cron","timestamp":"2025-06-19T11:18:19.172Z"}
+{"level":"info","message":"Подключение к БД установлено","timestamp":"2025-06-19T11:18:26.834Z"}
+{"level":"info","message":"Модели синхронизированы","timestamp":"2025-06-19T11:18:26.842Z"}
+{"level":"info","message":"Telegram бот временно отключён для тестирования API уведомлений","service":"telegram","timestamp":"2025-06-19T11:18:26.843Z"}
+{"level":"info","message":"Инициализация системы событий","timestamp":"2025-06-19T11:18:26.843Z"}
+{"level":"info","message":"Все слушатели событий зарегистрированы","timestamp":"2025-06-19T11:18:26.843Z"}
+{"level":"info","message":"Система событий запущена и готова к работе","timestamp":"2025-06-19T11:18:26.843Z"}
+{"level":"info","message":"Планировщик напоминаний запущен","service":"cron","timestamp":"2025-06-19T11:18:26.873Z"}
+{"level":"info","message":"Планировщик напоминаний инициализирован","service":"cron","timestamp":"2025-06-19T11:18:26.873Z"}
+{"level":"info","message":"Подключение к БД установлено","timestamp":"2025-06-19T11:19:49.344Z"}
+{"level":"info","message":"Модели синхронизированы","timestamp":"2025-06-19T11:19:49.351Z"}
+{"level":"info","message":"Telegram бот временно отключён для тестирования API уведомлений","service":"telegram","timestamp":"2025-06-19T11:19:49.352Z"}
+{"level":"info","message":"Инициализация системы событий","timestamp":"2025-06-19T11:19:49.352Z"}
+{"level":"info","message":"Все слушатели событий зарегистрированы","timestamp":"2025-06-19T11:19:49.352Z"}
+{"level":"info","message":"Система событий запущена и готова к работе","timestamp":"2025-06-19T11:19:49.352Z"}
+{"level":"info","message":"Планировщик напоминаний запущен","service":"cron","timestamp":"2025-06-19T11:19:49.381Z"}
+{"level":"info","message":"Планировщик напоминаний инициализирован","service":"cron","timestamp":"2025-06-19T11:19:49.381Z"}
+{"level":"info","message":"Подключение к БД установлено","timestamp":"2025-06-19T11:19:51.918Z"}
+{"level":"info","message":"Модели синхронизированы","timestamp":"2025-06-19T11:19:51.924Z"}
+{"level":"info","message":"Telegram бот временно отключён для тестирования API уведомлений","service":"telegram","timestamp":"2025-06-19T11:19:51.925Z"}
+{"level":"info","message":"Инициализация системы событий","timestamp":"2025-06-19T11:19:51.925Z"}
+{"level":"info","message":"Все слушатели событий зарегистрированы","timestamp":"2025-06-19T11:19:51.925Z"}
+{"level":"info","message":"Система событий запущена и готова к работе","timestamp":"2025-06-19T11:19:51.926Z"}
+{"level":"info","message":"Планировщик напоминаний запущен","service":"cron","timestamp":"2025-06-19T11:19:51.948Z"}
+{"level":"info","message":"Планировщик напоминаний инициализирован","service":"cron","timestamp":"2025-06-19T11:19:51.949Z"}
+{"level":"info","message":"Подключение к БД установлено","timestamp":"2025-06-19T11:19:57.506Z"}
+{"level":"info","message":"Модели синхронизированы","timestamp":"2025-06-19T11:19:57.513Z"}
+{"level":"info","message":"Telegram бот временно отключён для тестирования API уведомлений","service":"telegram","timestamp":"2025-06-19T11:19:57.514Z"}
+{"level":"info","message":"Инициализация системы событий","timestamp":"2025-06-19T11:19:57.514Z"}
+{"level":"info","message":"Все слушатели событий зарегистрированы","timestamp":"2025-06-19T11:19:57.514Z"}
+{"level":"info","message":"Система событий запущена и готова к работе","timestamp":"2025-06-19T11:19:57.514Z"}
+{"level":"info","message":"Планировщик напоминаний запущен","service":"cron","timestamp":"2025-06-19T11:19:57.536Z"}
+{"level":"info","message":"Планировщик напоминаний инициализирован","service":"cron","timestamp":"2025-06-19T11:19:57.536Z"}
+{"level":"info","message":"Подключение к БД установлено","timestamp":"2025-06-19T11:20:11.539Z"}
+{"level":"info","message":"Модели синхронизированы","timestamp":"2025-06-19T11:20:11.545Z"}
+{"level":"info","message":"Telegram бот временно отключён для тестирования API уведомлений","service":"telegram","timestamp":"2025-06-19T11:20:11.546Z"}
+{"level":"info","message":"Инициализация системы событий","timestamp":"2025-06-19T11:20:11.546Z"}
+{"level":"info","message":"Все слушатели событий зарегистрированы","timestamp":"2025-06-19T11:20:11.546Z"}
+{"level":"info","message":"Система событий запущена и готова к работе","timestamp":"2025-06-19T11:20:11.546Z"}
+{"level":"info","message":"Планировщик напоминаний запущен","service":"cron","timestamp":"2025-06-19T11:20:11.573Z"}
+{"level":"info","message":"Планировщик напоминаний инициализирован","service":"cron","timestamp":"2025-06-19T11:20:11.573Z"}
+{"level":"info","message":"Подключение к БД установлено","timestamp":"2025-06-19T11:20:15.537Z"}
+{"level":"info","message":"Модели синхронизированы","timestamp":"2025-06-19T11:20:15.543Z"}
+{"level":"info","message":"Telegram бот временно отключён для тестирования API уведомлений","service":"telegram","timestamp":"2025-06-19T11:20:15.544Z"}
+{"level":"info","message":"Инициализация системы событий","timestamp":"2025-06-19T11:20:15.545Z"}
+{"level":"info","message":"Все слушатели событий зарегистрированы","timestamp":"2025-06-19T11:20:15.545Z"}
+{"level":"info","message":"Система событий запущена и готова к работе","timestamp":"2025-06-19T11:20:15.545Z"}
+{"level":"info","message":"Планировщик напоминаний запущен","service":"cron","timestamp":"2025-06-19T11:20:15.568Z"}
+{"level":"info","message":"Планировщик напоминаний инициализирован","service":"cron","timestamp":"2025-06-19T11:20:15.568Z"}
