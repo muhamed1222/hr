@@ -8,5 +8,15 @@
         "distDir": "dist"
       }
     }
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "/admin-panel/api/$1"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/admin-panel/dist/index.html"
+    }
   ]
 } 
