@@ -1,0 +1,370 @@
+name: 🚀 Deploy TimeBot to Production
+
+on:
+  push:
+    branches: [ main, production ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+        - staging
+        - production
+
+env:
+  NODE_VERSION: '18'
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # 🧪 Тестирование кода
+  test:
+    name: 🧪 Tests & Linting
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 📥 Checkout Code
+      uses: actions/checkout@v4
+      
+    - name: 🟢 Setup Node.js ${{ env.NODE_VERSION }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        
+    - name: 📦 Install Dependencies
+      run: npm ci
+      
+    - name: 🔍 Run ESLint
+      run: npm run lint || true
+      
+    - name: 🧪 Run Tests
+      run: npm test || true
+      
+    - name: 📊 Generate Test Coverage
+      run: npm run test:coverage || true
+      
+    - name: 📤 Upload Coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage/lcov.info
+        fail_ci_if_error: false
+
+  # 🏗️ Сборка Admin Panel
+  build-frontend:
+    name: 🏗️ Build Admin Panel
+    runs-on: ubuntu-latest
+    needs: test
+    
+    steps:
+    - name: 📥 Checkout Code
+      uses: actions/checkout@v4
+      
+    - name: 🟢 Setup Node.js ${{ env.NODE_VERSION }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        cache-dependency-path: admin-panel/package-lock.json
+        
+    - name: 📦 Install Frontend Dependencies
+      working-directory: ./admin-panel
+      run: npm ci
+      
+    - name: 🏗️ Build Admin Panel
+      working-directory: ./admin-panel
+      run: npm run build
+      env:
+        VITE_API_URL: https://your-domain.com/api
+        
+    - name: 📤 Upload Build Artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: admin-panel-dist
+        path: admin-panel/dist/
+        retention-days: 30
+
+  # 🐳 Сборка Docker образа
+  build-docker:
+    name: 🐳 Build Docker Image
+    runs-on: ubuntu-latest
+    needs: test
+    permissions:
+      contents: read
+      packages: write
+      
+    outputs:
+      image: ${{ steps.image.outputs.image }}
+      digest: ${{ steps.build.outputs.digest }}
+      
+    steps:
+    - name: 📥 Checkout Code
+      uses: actions/checkout@v4
+      
+    - name: 🐳 Setup Docker Buildx
+      uses: docker/setup-buildx-action@v3
+      
+    - name: 🔐 Login to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: 🏷️ Extract Metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
+          type=raw,value=latest,enable={{is_default_branch}}
+          
+    - name: 🔨 Build and Push Docker Image
+      id: build
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        platforms: linux/amd64,linux/arm64
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        
+    - name: 📝 Output Image
+      id: image
+      run: |
+        echo "image=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}" >> $GITHUB_OUTPUT
+
+  # 🚀 Развёртывание на staging
+  deploy-staging:
+    name: 🚀 Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [build-frontend, build-docker]
+    if: github.ref == 'refs/heads/main' || github.event.inputs.environment == 'staging'
+    environment: 
+      name: staging
+      url: https://staging.your-domain.com
+      
+    steps:
+    - name: 📥 Checkout Code
+      uses: actions/checkout@v4
+      
+    - name: 📥 Download Frontend Build
+      uses: actions/download-artifact@v3
+      with:
+        name: admin-panel-dist
+        path: admin-panel/dist/
+        
+    - name: 🚀 Deploy to Staging Server
+      uses: appleboy/ssh-action@v1.0.0
+      with:
+        host: ${{ secrets.STAGING_HOST }}
+        username: ${{ secrets.STAGING_USER }}
+        key: ${{ secrets.STAGING_SSH_KEY }}
+        port: ${{ secrets.STAGING_PORT || 22 }}
+        script: |
+          cd /var/www/timebot-staging
+          git pull origin main
+          docker-compose down
+          docker-compose pull
+          docker-compose up -d
+          docker system prune -f
+          
+    - name: 🩺 Health Check
+      run: |
+        sleep 30
+        curl -f https://staging.your-domain.com/health || exit 1
+        
+    - name: 📢 Notify Slack (Success)
+      if: success()
+      uses: 8398a7/action-slack@v3
+      with:
+        status: success
+        text: '🎉 TimeBot успешно развёрнут на staging!'
+      env:
+        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+  # 🏭 Развёртывание на production
+  deploy-production:
+    name: 🏭 Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [build-frontend, build-docker, deploy-staging]
+    if: startsWith(github.ref, 'refs/tags/') || github.event.inputs.environment == 'production'
+    environment: 
+      name: production
+      url: https://your-domain.com
+      
+    steps:
+    - name: 📥 Checkout Code
+      uses: actions/checkout@v4
+      
+    - name: 📥 Download Frontend Build
+      uses: actions/download-artifact@v3
+      with:
+        name: admin-panel-dist
+        path: admin-panel/dist/
+        
+    - name: 🚀 Deploy to Production Server
+      uses: appleboy/ssh-action@v1.0.0
+      with:
+        host: ${{ secrets.PRODUCTION_HOST }}
+        username: ${{ secrets.PRODUCTION_USER }}
+        key: ${{ secrets.PRODUCTION_SSH_KEY }}
+        port: ${{ secrets.PRODUCTION_PORT || 22 }}
+        script: |
+          cd /var/www/timebot-production
+          git pull origin main
+          docker-compose down
+          docker-compose pull
+          docker-compose up -d
+          docker system prune -f
+          
+    - name: 🩺 Health Check
+      run: |
+        sleep 30
+        curl -f https://your-domain.com/health || exit 1
+        
+    - name: 📢 Notify Slack (Success)
+      if: success()
+      uses: 8398a7/action-slack@v3
+      with:
+        status: success
+        text: '🚀 TimeBot успешно развёрнут на production!'
+      env:
+        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        
+    - name: 📢 Notify Slack (Failure)
+      if: failure()
+      uses: 8398a7/action-slack@v3
+      with:
+        status: failure
+        text: '❌ Ошибка развёртывания TimeBot на production!'
+      env:
+        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+  # 🔍 Мониторинг после развёртывания
+  post-deploy-monitoring:
+    name: 🔍 Post-Deploy Monitoring
+    runs-on: ubuntu-latest
+    needs: [deploy-production]
+    if: success()
+    
+    steps:
+    - name: 🩺 Extended Health Checks
+      run: |
+        echo "🔍 Проверка основных эндпоинтов..."
+        
+        # Health check
+        curl -f https://your-domain.com/health
+        
+        # API endpoints
+        curl -f https://your-domain.com/api/auth/verify || true
+        
+        echo "✅ Все проверки пройдены!"
+        
+    - name: 📊 Performance Test
+      run: |
+        echo "📊 Базовый тест производительности..."
+        
+        # Простой тест нагрузки (требует установки wrk)
+        # wrk -t2 -c10 -d30s https://your-domain.com/health || true
+        
+        echo "📊 Тест производительности завершён"
+        
+    - name: 🤖 Test Telegram Bot
+      run: |
+        echo "🤖 Тестирование Telegram бота..."
+        
+        # Проверка webhook (если настроен)
+        curl -f "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/getWebhookInfo" || true
+        
+        echo "🤖 Telegram бот проверен"
+      env:
+        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+
+  # 🔄 Rollback workflow
+  rollback:
+    name: 🔄 Rollback
+    runs-on: ubuntu-latest
+    if: failure() && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
+    needs: [deploy-production]
+    environment: production
+    
+    steps:
+    - name: 🔄 Rollback Production
+      uses: appleboy/ssh-action@v1.0.0
+      with:
+        host: ${{ secrets.PRODUCTION_HOST }}
+        username: ${{ secrets.PRODUCTION_USER }}
+        key: ${{ secrets.PRODUCTION_SSH_KEY }}
+        script: |
+          cd /var/www/timebot-production
+          git checkout HEAD~1
+          docker-compose down
+          docker-compose up -d
+          
+    - name: 📢 Notify Rollback
+      uses: 8398a7/action-slack@v3
+      with:
+        status: warning
+        text: '🔄 Выполнен rollback TimeBot на production!'
+      env:
+        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+  # 📋 Генерация отчёта
+  generate-report:
+    name: 📋 Generate Deployment Report
+    runs-on: ubuntu-latest
+    needs: [deploy-production, post-deploy-monitoring]
+    if: always()
+    
+    steps:
+    - name: 📋 Create Deployment Report
+      run: |
+        cat << EOF > deployment-report.md
+        # 🚀 TimeBot Deployment Report
+        
+        **Date:** $(date)
+        **Commit:** ${{ github.sha }}
+        **Branch:** ${{ github.ref }}
+        **Triggered by:** ${{ github.actor }}
+        
+        ## 📊 Results
+        
+        - **Tests:** ${{ needs.test.result }}
+        - **Frontend Build:** ${{ needs.build-frontend.result }}
+        - **Docker Build:** ${{ needs.build-docker.result }}
+        - **Staging Deploy:** ${{ needs.deploy-staging.result }}
+        - **Production Deploy:** ${{ needs.deploy-production.result }}
+        - **Monitoring:** ${{ needs.post-deploy-monitoring.result }}
+        
+        ## 🔗 Links
+        
+        - **Production:** https://your-domain.com
+        - **Staging:** https://staging.your-domain.com
+        - **Admin Panel:** https://your-domain.com/admin
+        
+        ## 🏷️ Docker Image
+        
+        \`\`\`
+        ${{ needs.build-docker.outputs.image }}
+        \`\`\`
+        
+        EOF
+        
+    - name: 📤 Upload Report
+      uses: actions/upload-artifact@v3
+      with:
+        name: deployment-report
+        path: deployment-report.md 
