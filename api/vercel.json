@@ -1,10 +1,12 @@
 {
   "version": 2,
-  "functions": {
-    "src/app.js": {
-      "runtime": "@vercel/node@2"
+  "name": "hr-api",
+  "builds": [
+    {
+      "src": "src/app.js",
+      "use": "@vercel/node"
     }
-  },
+  ],
   "routes": [
     {
       "src": "/(.*)",

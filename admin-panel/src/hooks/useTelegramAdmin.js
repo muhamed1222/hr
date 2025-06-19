@@ -3,7 +3,8 @@ import { useAuthStore } from '@/store/useAuthStore'
 import axios from 'axios'
 import toast from 'react-hot-toast'
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api'
+// Fallback для продакшна
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://hr-api-placeholder.vercel.app/api'
 
 /**
  * Хук для работы с Telegram админкой
@@ -22,7 +23,8 @@ export function useTelegramAdmin() {
     baseURL: API_BASE_URL,
     headers: {
       'Authorization': `Bearer ${token}`
-    }
+    },
+    timeout: 10000 // 10 секунд таймаут
   })
 
   /**
@@ -33,19 +35,37 @@ export function useTelegramAdmin() {
       setIsLoading(true)
       setError(null)
 
+      // Проверяем доступность API
+      if (API_BASE_URL.includes('placeholder')) {
+        throw new Error('API сервер не настроен. Обратитесь к администратору.')
+      }
+
       const response = await apiClient.get('/telegram-admin/employees')
       
-      setEmployees(response.data.employees)
+      setEmployees(response.data.employees || [])
       
       console.log('📋 Загружен список сотрудников:', {
-        count: response.data.employees.length,
+        count: response.data.employees?.length || 0,
         summary: response.data.summary
       })
 
       return response.data
 
     } catch (error) {
-      const errorMessage = error.response?.data?.error || 'Ошибка загрузки сотрудников'
+      let errorMessage = 'Ошибка загрузки сотрудников'
+      
+      if (error.code === 'ECONNREFUSED' || error.code === 'ERR_NETWORK') {
+        errorMessage = 'Нет соединения с сервером API'
+      } else if (error.response?.status === 401) {
+        errorMessage = 'Требуется авторизация'
+      } else if (error.response?.status === 403) {
+        errorMessage = 'Доступ запрещен'
+      } else if (error.response?.data?.error) {
+        errorMessage = error.response.data.error
+      } else if (error.message) {
+        errorMessage = error.message
+      }
+      
       setError(errorMessage)
       console.error('❌ Ошибка загрузки сотрудников:', error)
       throw new Error(errorMessage)

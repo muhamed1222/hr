@@ -73,8 +73,15 @@ export default function TelegramAdmin() {
 
   // Загрузка данных при монтировании
   useEffect(() => {
-    refreshAll()
-  }, [refreshAll])
+    refreshAll().catch(err => {
+      console.error('Ошибка инициализации:', err)
+      if (isTelegram) {
+        showTelegramAlert('Ошибка подключения к API ❌')
+      } else {
+        toast.error('Ошибка подключения к API')
+      }
+    })
+  }, [refreshAll, isTelegram])
 
   // Настройка Telegram кнопок
   useEffect(() => {
