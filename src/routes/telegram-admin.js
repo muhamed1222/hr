@@ -134,7 +134,7 @@ router.get('/employees', async (req, res) => {
       };
     });
 
-    console.log(`📋 Telegram admin: загружен список из ${employeesData.length} сотрудников`);
+    // // console.log(`📋 Telegram admin: загружен список из ${employeesData.length} сотрудников`);
 
     res.json({
       employees: employeesData,
@@ -242,7 +242,7 @@ router.patch('/logs/:id', async (req, res) => {
       via: 'telegram_admin'
     });
 
-    console.log(`✏️ Админ ${req.user.username} отредактировал лог ${id} пользователя ${log.user.name}`);
+    // // console.log(`✏️ Админ ${req.user.username} отредактировал лог ${id} пользователя ${log.user.name}`);
 
     res.json({
       message: 'Лог успешно обновлен',
@@ -289,7 +289,7 @@ router.post('/users/:id/disable', async (req, res) => {
       via: 'telegram_admin'
     });
 
-    console.log(`🚫 Админ ${req.user.username} отключил пользователя ${user.name}`);
+    // // console.log(`🚫 Админ ${req.user.username} отключил пользователя ${user.name}`);
 
     res.json({
       message: `Пользователь ${user.name} отключен`,
@@ -327,7 +327,7 @@ router.post('/users/:id/enable', async (req, res) => {
       via: 'telegram_admin'
     });
 
-    console.log(`✅ Админ ${req.user.username} включил пользователя ${user.name}`);
+    // // console.log(`✅ Админ ${req.user.username} включил пользователя ${user.name}`);
 
     res.json({
       message: `Пользователь ${user.name} включен`,
@@ -435,7 +435,7 @@ router.delete('/logs/:id', async (req, res) => {
       via: 'telegram_admin'
     });
 
-    console.log(`🗑️ Админ ${req.user.username} удалил лог ${id} пользователя ${log.user.name}`);
+    // // console.log(`🗑️ Админ ${req.user.username} удалил лог ${id} пользователя ${log.user.name}`);
 
     res.json({ message: 'Лог успешно удален' });
 

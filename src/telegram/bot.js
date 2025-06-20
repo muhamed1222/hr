@@ -1,6 +1,7 @@
 const TelegramBot = require('node-telegram-bot-api');
-const { User, WorkLog } = require('../models');
+const { User, WorkLog, Absence } = require('../models');
 const moment = require('moment');
+const { emitEvent } = require('../events/eventEmitter');
 require('dotenv').config();
 
 moment.locale('ru');
@@ -25,6 +26,8 @@ class TimeBot {
     this.bot.onText(/\/editreport/, this.handleEditReport.bind(this));
     this.bot.onText(/\/cancel/, this.handleCancel.bind(this));
     this.bot.onText(/\/history/, this.handleHistory.bind(this));
+    this.bot.onText(/\/absence/, this.handleAbsence.bind(this));
+    this.bot.onText(/\/absences/, this.handleAbsences.bind(this));
   }
 
   setupCallbacks() {
@@ -283,33 +286,55 @@ class TimeBot {
 
   async handleHelp(msg) {
     const chatId = msg.chat.id;
+    const telegramId = msg.from.id;
+    const user = await this.getUser(telegramId);
+    const webAppUrl = process.env.WEB_APP_URL || 'https://your-domain.com';
     
-    const helpMessage = 
-      `🤖 *Outcast TimeBot - Справка*\n\n` +
-      `*Основные команды:*\n` +
-      `/start - Начать работу/регистрация\n` +
-      `/myday - Просмотр сегодняшнего дня\n` +
-      `/myweek - Детальная статистика за неделю\n` +
-      `/history - История работы за месяц\n` +
-      `/team - Статус команды (для менеджеров)\n` +
-      `/editreport - Редактировать отчёт за сегодня\n` +
-      `/cancel - Отменить текущую операцию\n` +
-      `/help - Эта справка\n\n` +
-      `*Кнопки меню:*\n` +
+    let helpMessage = 
+      `🤖 *TimeBot - Справочник команд*\n\n` +
+      `*📱 Основные команды:*\n` +
+      `🚀 /start - Начать работу/регистрация\n` +
+      `📊 /myday - Просмотр сегодняшнего дня\n` +
+      `📅 /myweek - Статистика за 5 рабочих дней\n` +
+      `📈 /history - История работы за месяц\n` +
+      `📝 /editreport - Редактировать отчёт за сегодня\n` +
+      `❌ /cancel - Отменить текущую операцию\n` +
+      `❓ /help - Эта справка\n\n`;
+
+    if (user && (user.role === 'manager' || user.role === 'admin')) {
+      helpMessage += `*👥 Команды менеджера:*\n` +
+        `🏢 /team - Статус команды в реальном времени\n\n`;
+    }
+
+    helpMessage += 
+      `*🎯 Кнопки главного меню:*\n` +
       `✅ Пришёл в офис - Отметка прихода на работу\n` +
       `🏠 Работаю удалённо - Отметка удалённой работы\n` +
       `🍱 Начал обед - Начало обеденного перерыва\n` +
       `🔙 Вернулся с обеда - Конец обеденного перерыва\n` +
       `❌ Ушёл домой - Завершение рабочего дня + отчёт\n` +
-      `🤒 Больничный - Отметка болезни\n\n` +
-      `*Рабочий процесс:*\n` +
-      `1️⃣ Отметьтесь при приходе\n` +
-      `2️⃣ Отметьте обед (при необходимости)\n` +
+      `📊 Моя статистика - Быстрый просмотр данных\n` +
+      `🤒 Больничный - Отметка больничного дня\n` +
+      `🌴 Отпуск - Отметка отпускного дня\n\n` +
+      `*🔄 Рабочий процесс:*\n` +
+      `1️⃣ Отметьтесь при приходе (офис/удалённо)\n` +
+      `2️⃣ Отметьте обед при необходимости\n` +
       `3️⃣ Отметьте уход - система попросит отчёт\n` +
-      `4️⃣ Напишите текст отчёта\n\n` +
-      `💡 После завершения дня можно редактировать отчёт командой /editreport`;
+      `4️⃣ Напишите отчёт о проделанной работе\n\n` +
+      `*🔗 Веб-интерфейс:*\n` +
+      `📈 [Панель управления](${webAppUrl}/dashboard)\n` +
+      `📊 [Аналитика и графики](${webAppUrl}/analytics)\n` +
+      `📝 [История работы](${webAppUrl}/work-logs)\n\n` +
+      `💡 *Подсказки:*\n` +
+      `• Отчёт можно редактировать командой /editreport\n` +
+      `• Статистика автоматически обновляется\n` +
+      `• Больничный/отпуск можно изменить в любое время\n` +
+      `• Веб-панель синхронизирована с ботом`;
 
-    await this.bot.sendMessage(chatId, helpMessage, { parse_mode: 'Markdown' });
+    await this.bot.sendMessage(chatId, helpMessage, { 
+      parse_mode: 'Markdown',
+      disable_web_page_preview: true 
+    });
   }
 
   async handleMyWeek(msg) {
@@ -327,9 +352,10 @@ class TimeBot {
       const user = await this.getUser(telegramId);
       if (!user) return await this.sendNotRegistered(chatId);
 
-      // Получаем данные за последние 7 дней (включая сегодня)
-      const endDate = moment();
-      const startDate = moment().subtract(6, 'days');
+      // Получаем последние 5 рабочих дней (пн-пт)
+      const workingDays = this.getLastWorkingDays(5);
+      const startDate = workingDays[0];
+      const endDate = workingDays[workingDays.length - 1];
 
       const { Op } = require('sequelize');
       const workLogs = await WorkLog.findAll({
@@ -345,60 +371,68 @@ class TimeBot {
         order: [['workDate', 'ASC']]
       });
 
-      let message = `📅 *Ваша неделя (${startDate.format('DD.MM')} - ${endDate.format('DD.MM.YYYY')})*\n\n`;
+      let message = `📅 *Последние 5 рабочих дней (${startDate.format('DD.MM')} - ${endDate.format('DD.MM.YYYY')})*\n\n`;
 
-      if (workLogs.length === 0) {
-        message += '❌ За последние 7 дней активности не было';
-      } else {
-        // Статистика
-        let totalMinutes = 0;
-        let workDays = 0;
-        let remoteDays = 0;
-        let officeDays = 0;
-        let reportsCount = 0;
-        let lateArrivals = 0;
+      // Статистика
+      let totalMinutes = 0;
+      let actualWorkDays = 0;
+      let remoteDays = 0;
+      let officeDays = 0;
+      let sickDays = 0;
+      let vacationDays = 0;
+      let reportsCount = 0;
+      let lateArrivals = 0;
 
-        // Создаём карту дней для заполнения пропусков
-        const dayMap = new Map();
-        for (let i = 0; i < 7; i++) {
-          const date = moment().subtract(6 - i, 'days');
-          dayMap.set(date.format('YYYY-MM-DD'), {
-            date: date.format('YYYY-MM-DD'),
-            dayName: date.format('ddd DD.MM'),
-            workLog: null
-          });
-        }
-
-        // Заполняем данными
-        workLogs.forEach(log => {
-          if (dayMap.has(log.workDate)) {
-            dayMap.get(log.workDate).workLog = log;
-          }
+      // Создаём карту рабочих дней
+      const dayMap = new Map();
+      workingDays.forEach(date => {
+        dayMap.set(date.format('YYYY-MM-DD'), {
+          date: date.format('YYYY-MM-DD'),
+          dayName: date.format('ddd DD.MM'),
+          workLog: null
         });
+      });
 
-        // Формируем отчёт по дням
-        message += '📊 *Детализация по дням:*\n';
-        dayMap.forEach(day => {
-          const log = day.workLog;
-          if (log) {
-            const mode = this.getWorkModeText(log.workMode);
-            const time = this.formatMinutes(log.totalMinutes || 0);
-            const reportIcon = log.dailyReport ? '📝' : '❌';
-            const arrivalTime = log.arrivedAt ? log.arrivedAt.substring(0, 5) : '—';
-            const leftTime = log.leftAt ? log.leftAt.substring(0, 5) : '—';
-            
-            message += `${day.dayName}: ${mode}\n`;
+      // Заполняем данными
+      workLogs.forEach(log => {
+        if (dayMap.has(log.workDate)) {
+          dayMap.get(log.workDate).workLog = log;
+        }
+      });
+
+      // Формируем отчёт по дням
+      message += '📊 *Детализация по рабочим дням:*\n';
+      dayMap.forEach(day => {
+        const log = day.workLog;
+        if (log) {
+          const mode = this.getWorkModeText(log.workMode);
+          const time = this.formatMinutes(log.totalMinutes || 0);
+          const reportIcon = log.dailyReport && log.dailyReport !== 'Больничный день' && log.dailyReport !== 'Отпуск' ? '📝' : '❌';
+          const arrivalTime = log.arrivedAt ? log.arrivedAt.substring(0, 5) : '—';
+          const leftTime = log.leftAt ? log.leftAt.substring(0, 5) : '—';
+          
+          // Иконки для разных режимов
+          const modeIcon = {
+            'office': '🏢',
+            'remote': '🏠',
+            'sick': '🤒',
+            'vacation': '🌴'
+          }[log.workMode] || '💼';
+          
+          message += `${day.dayName}: ${modeIcon} ${mode}\n`;
+          if (log.workMode === 'office' || log.workMode === 'remote') {
             message += `   ⏰ ${arrivalTime} → ${leftTime} (${time})\n`;
-            message += `   ${reportIcon} ${log.dailyReport ? 'Есть отчёт' : 'Нет отчёта'}\n\n`;
+            message += `   ${reportIcon} ${log.dailyReport && log.dailyReport !== 'Больничный день' ? 'Есть отчёт' : 'Нет отчёта'}\n`;
+          }
+          message += '\n';
 
-            // Статистика
-            totalMinutes += log.totalMinutes || 0;
-            if (log.workMode !== 'sick' && log.workMode !== 'vacation') {
-              workDays++;
-              if (log.workMode === 'remote') remoteDays++;
-              if (log.workMode === 'office') officeDays++;
-            }
-            if (log.dailyReport) reportsCount++;
+          // Статистика
+          totalMinutes += log.totalMinutes || 0;
+          if (log.workMode === 'office' || log.workMode === 'remote') {
+            actualWorkDays++;
+            if (log.workMode === 'remote') remoteDays++;
+            if (log.workMode === 'office') officeDays++;
+            if (log.dailyReport && log.dailyReport !== 'Больничный день' && log.dailyReport !== 'Отпуск') reportsCount++;
             
             // Проверка опозданий (после 9:00)
             if (log.arrivedAt) {
@@ -406,26 +440,37 @@ class TimeBot {
               const expectedTime = moment('09:00:00', 'HH:mm:ss');
               if (arrivalMoment.isAfter(expectedTime)) lateArrivals++;
             }
-          } else {
-            message += `${day.dayName}: 🚫 Нет данных\n\n`;
+          } else if (log.workMode === 'sick') {
+            sickDays++;
+          } else if (log.workMode === 'vacation') {
+            vacationDays++;
           }
-        });
-
-        // Итоговая статистика
-        const avgHours = workDays > 0 ? (totalMinutes / workDays / 60).toFixed(1) : 0;
-        
-        message += '📈 *Сводка за неделю:*\n';
-        message += `⏱ Всего отработано: ${this.formatMinutes(totalMinutes)}\n`;
-        message += `📅 Рабочих дней: ${workDays}\n`;
-        message += `🏢 В офисе: ${officeDays} дней\n`;
-        message += `🏠 Удалённо: ${remoteDays} дней\n`;
-        message += `📝 Отчётов сдано: ${reportsCount}/${workLogs.length}\n`;
-        message += `⏰ Среднее время в день: ${avgHours}ч\n`;
-        
-        if (lateArrivals > 0) {
-          message += `⚠️ Опозданий: ${lateArrivals}\n`;
+        } else {
+          message += `${day.dayName}: 🚫 Нет данных\n\n`;
         }
+      });
+
+      // Итоговая статистика
+      const avgHours = actualWorkDays > 0 ? (totalMinutes / actualWorkDays / 60).toFixed(1) : 0;
+      
+      message += '📈 *Сводка за рабочие дни:*\n';
+      message += `⏱ Всего отработано: ${this.formatMinutes(totalMinutes)}\n`;
+      message += `📅 Рабочих дней: ${actualWorkDays}/5\n`;
+      if (officeDays > 0) message += `🏢 В офисе: ${officeDays} дней\n`;
+      if (remoteDays > 0) message += `🏠 Удалённо: ${remoteDays} дней\n`;
+      if (sickDays > 0) message += `🤒 Больничных: ${sickDays} дней\n`;
+      if (vacationDays > 0) message += `🌴 Отпускных: ${vacationDays} дней\n`;
+      message += `📝 Отчётов сдано: ${reportsCount}/${actualWorkDays}\n`;
+      if (actualWorkDays > 0) {
+        message += `⏰ Среднее время в день: ${avgHours}ч\n`;
       }
+      if (lateArrivals > 0) {
+        message += `⚠️ Опозданий: ${lateArrivals}\n`;
+      }
+
+      // Добавляем Deep Link для перехода в админку
+      const webAppUrl = process.env.WEB_APP_URL || 'https://your-domain.com';
+      message += `\n🔗 [Подробная аналитика в админке](${webAppUrl}/analytics)`;
 
       await this.bot.sendMessage(chatId, message, { 
         parse_mode: 'Markdown',
@@ -467,7 +512,15 @@ class TimeBot {
         );
       }
 
-      const message = this.formatTeamData(teamData);
+      let message = this.formatTeamData(teamData);
+      
+      // Добавляем deep links для менеджеров
+      const webAppUrl = process.env.WEB_APP_URL || 'https://your-domain.com';
+      message += `\n🔗 *Управление командой:*\n`;
+      message += `👥 [Список сотрудников](${webAppUrl}/users)\n`;
+      message += `📊 [Аналитика команды](${webAppUrl}/analytics)\n`;
+      message += `📈 [Панель управления](${webAppUrl}/dashboard)\n`;
+      message += `📝 [Журнал работы](${webAppUrl}/work-logs)`;
       
       await this.bot.sendMessage(chatId, message, { 
         parse_mode: 'Markdown',
@@ -696,6 +749,47 @@ class TimeBot {
           await this.markSickDay(chatId, user);
           await this.bot.answerCallbackQuery(callbackQuery.id, { text: '🤒 Больничный отмечен' });
           return;
+        case 'vacation_day':
+          // Отпуск не требует валидации
+          await this.markVacationDay(chatId, user);
+          await this.bot.answerCallbackQuery(callbackQuery.id, { text: '🌴 Отпуск отмечен' });
+          return;
+        case 'my_stats':
+          // Показать статистику с deep links
+          await this.showUserStats(chatId, user);
+          await this.bot.answerCallbackQuery(callbackQuery.id, { text: '📊 Статистика' });
+          return;
+        case 'request_absence':
+          // Подача заявки на отсутствие
+          await this.showAbsenceTypes(chatId, user);
+          await this.bot.answerCallbackQuery(callbackQuery.id, { text: '📝 Заявка на отсутствие' });
+          return;
+        case 'absence_vacation':
+          await this.startAbsenceRequest(chatId, user, 'vacation');
+          await this.bot.answerCallbackQuery(callbackQuery.id, { text: '🌴 Заявка на отпуск' });
+          return;
+        case 'absence_sick':
+          await this.startAbsenceRequest(chatId, user, 'sick');
+          await this.bot.answerCallbackQuery(callbackQuery.id, { text: '🤒 Заявка на больничный' });
+          return;
+        case 'absence_business_trip':
+          await this.startAbsenceRequest(chatId, user, 'business_trip');
+          await this.bot.answerCallbackQuery(callbackQuery.id, { text: '🧳 Заявка на командировку' });
+          return;
+        case 'absence_day_off':
+          await this.startAbsenceRequest(chatId, user, 'day_off');
+          await this.bot.answerCallbackQuery(callbackQuery.id, { text: '🏠 Заявка на отгул' });
+          return;
+        case 'my_absences':
+          await this.showMyAbsences(chatId, user);
+          await this.bot.answerCallbackQuery(callbackQuery.id, { text: '📋 Мои заявки' });
+          return;
+      }
+
+      // Обработка управления заявками для менеджеров
+      if (data.startsWith('approve_absence_') || data.startsWith('reject_absence_')) {
+        await this.handleAbsenceManagement(callbackQuery, user);
+        return;
       }
 
       // Валидация действия
@@ -780,14 +874,22 @@ class TimeBot {
           ],
           [
             { text: '❌ Ушёл домой', callback_data: 'left_work' },
-            { text: '🤒 Больничный', callback_data: 'sick_day' }
+            { text: '📊 Моя статистика', callback_data: 'my_stats' }
+          ],
+          [
+            { text: '🤒 Больничный', callback_data: 'sick_day' },
+            { text: '🌴 Отпуск', callback_data: 'vacation_day' }
+          ],
+          [
+            { text: '📝 Подать заявку', callback_data: 'request_absence' }
           ]
         ]
       };
 
+      const webAppUrl = process.env.WEB_APP_URL || 'https://your-domain.com';
       const message = customMessage || 
         `🕐 *Управление рабочим временем*${statusInfo}\n\n` +
-        `Выберите действие:`;
+        `Выберите действие или перейдите в [📊 Админку](${webAppUrl}/dashboard)`;
 
       await this.bot.sendMessage(chatId, message, { 
         reply_markup: keyboard,
@@ -808,7 +910,14 @@ class TimeBot {
           ],
           [
             { text: '❌ Ушёл домой', callback_data: 'left_work' },
-            { text: '🤒 Больничный', callback_data: 'sick_day' }
+            { text: '📊 Моя статистика', callback_data: 'my_stats' }
+          ],
+          [
+            { text: '🤒 Больничный', callback_data: 'sick_day' },
+            { text: '🌴 Отпуск', callback_data: 'vacation_day' }
+          ],
+          [
+            { text: '📝 Подать заявку', callback_data: 'request_absence' }
           ]
         ]
       };
@@ -989,6 +1098,11 @@ class TimeBot {
       } else if (userState && userState.state === 'editing_report') {
         await this.handleEditDailyReport(chatId, user, text, userState.workLogId);
         this.userStates.delete(telegramId); // Очищаем состояние
+      } else if (userState && userState.state === 'absence_request') {
+        await this.processAbsenceRequest(chatId, user, text);
+      } else if (userState && userState.state === 'rejecting_absence') {
+        await this.processAbsenceRejection(chatId, user, text, userState.absenceId);
+        this.userStates.delete(telegramId);
       } else {
         // Если пользователь не в состоянии ожидания отчёта, показываем меню
         await this.sendMainMenu(chatId);
@@ -1097,11 +1211,148 @@ class TimeBot {
       }
 
       await this.bot.sendMessage(chatId, 
-        '🤒 Больничный день отмечен. Скорейшего выздоровления!'
+        '🤒 *Больничный день отмечен*\n\n' +
+        `📅 Дата: ${moment().format('DD.MM.YYYY')}\n` +
+        `💊 Скорейшего выздоровления!\n\n` +
+        `💡 _Вы можете изменить статус в любое время через главное меню_`,
+        { parse_mode: 'Markdown' }
       );
     } catch (error) {
       console.error('Ошибка в markSickDay:', error);
-      await this.bot.sendMessage(chatId, '❌ Ошибка отметки больничного');
+      await this.sendUserFriendlyError(chatId, 'database_error');
+    }
+  }
+
+  async markVacationDay(chatId, user) {
+    const today = moment().format('YYYY-MM-DD');
+
+    try {
+      const [workLog, created] = await WorkLog.findOrCreate({
+        where: { userId: user.id, workDate: today },
+        defaults: {
+          userId: user.id,
+          workDate: today,
+          workMode: 'vacation',
+          dailyReport: 'Отпуск',
+          totalMinutes: 0
+        }
+      });
+
+      if (!created) {
+        await workLog.update({
+          workMode: 'vacation',
+          dailyReport: 'Отпуск',
+          arrivedAt: null,
+          leftAt: null,
+          lunchStart: null,
+          lunchEnd: null,
+          totalMinutes: 0
+        });
+      }
+
+      await this.bot.sendMessage(chatId, 
+        '🌴 *Отпускной день отмечен*\n\n' +
+        `📅 Дата: ${moment().format('DD.MM.YYYY')}\n` +
+        `🏖 Приятного отдыха!\n\n` +
+        `💡 _Вы можете изменить статус в любое время через главное меню_`,
+        { parse_mode: 'Markdown' }
+      );
+    } catch (error) {
+      console.error('Ошибка в markVacationDay:', error);
+      await this.sendUserFriendlyError(chatId, 'database_error');
+    }
+  }
+
+  async showUserStats(chatId, user) {
+    try {
+      await this.bot.sendChatAction(chatId, 'typing');
+      
+      const today = moment().format('YYYY-MM-DD');
+      const webAppUrl = process.env.WEB_APP_URL || 'https://your-domain.com';
+      
+      // Получаем данные за сегодня
+      const todayWorkLog = await WorkLog.findOne({
+        where: { userId: user.id, workDate: today }
+      });
+
+      // Получаем данные за текущую неделю
+      const startOfWeek = moment().startOf('isoWeek').format('YYYY-MM-DD');
+      const endOfWeek = moment().endOf('isoWeek').format('YYYY-MM-DD');
+
+      const { Op } = require('sequelize');
+      const weekLogs = await WorkLog.findAll({
+        where: {
+          userId: user.id,
+          workDate: {
+            [Op.between]: [startOfWeek, endOfWeek]
+          }
+        }
+      });
+
+      let weekTotal = 0;
+      let weekDays = 0;
+      weekLogs.forEach(log => {
+        if (log.workMode === 'office' || log.workMode === 'remote') {
+          weekTotal += log.totalMinutes || 0;
+          weekDays++;
+        }
+      });
+
+      let message = `📊 *Ваша статистика*\n\n`;
+      
+      // Сегодняшний день
+      message += `📅 *Сегодня (${moment().format('DD.MM.YYYY')}):*\n`;
+      if (todayWorkLog) {
+        const status = this.getEmployeeStatus(todayWorkLog);
+        const statusEmojis = {
+          'working': '💼 Работаете',
+          'lunch': '🍱 На обеде',  
+          'finished': '✅ День завершён',
+          'not_started': '🌅 Не начат',
+          'sick': '🤒 Больничный',
+          'vacation': '🌴 Отпуск'
+        };
+        
+        message += `   ${statusEmojis[status] || '📊 Статус неизвестен'}\n`;
+        if (todayWorkLog.totalMinutes) {
+          message += `   ⏱ Время: ${this.formatMinutes(todayWorkLog.totalMinutes)}\n`;
+        }
+        if (todayWorkLog.arrivedAt) {
+          message += `   🟢 Пришёл: ${todayWorkLog.arrivedAt.substring(0, 5)}\n`;
+        }
+        if (todayWorkLog.leftAt) {
+          message += `   🔴 Ушёл: ${todayWorkLog.leftAt.substring(0, 5)}\n`;
+        }
+      } else {
+        message += `   🚫 Нет данных\n`;
+      }
+
+      // Текущая неделя
+      message += `\n📈 *Текущая неделя:*\n`;
+      message += `   📅 Рабочих дней: ${weekDays}\n`;
+      message += `   ⏱ Всего отработано: ${this.formatMinutes(weekTotal)}\n`;
+      if (weekDays > 0) {
+        const avgDaily = (weekTotal / weekDays / 60).toFixed(1);
+        message += `   📊 Среднее в день: ${avgDaily}ч\n`;
+      }
+
+      // Deep Links для детальной информации
+      message += `\n🔗 *Подробная информация:*\n`;
+      message += `📊 [Аналитика и графики](${webAppUrl}/analytics)\n`;
+      message += `📋 [Личный профиль](${webAppUrl}/employees/${user.id})\n`;
+      message += `📝 [История работы](${webAppUrl}/work-logs)\n`;
+      if (user.role === 'manager' || user.role === 'admin') {
+        message += `👥 [Управление командой](${webAppUrl}/users)\n`;
+        message += `📈 [Панель управления](${webAppUrl}/dashboard)\n`;
+      }
+
+      await this.bot.sendMessage(chatId, message, { 
+        parse_mode: 'Markdown',
+        disable_web_page_preview: true 
+      });
+    } catch (error) {
+      console.error('Ошибка в showUserStats:', error);
+      await this.sendUserFriendlyError(chatId, 'stats_error', { statsType: 'user' });
     }
   }
 
@@ -1143,6 +1394,23 @@ class TimeBot {
       return `${hours}ч ${mins}м`;
     }
     return `${mins}м`;
+  }
+
+  // Получить последние рабочие дни (пн-пт)
+  getLastWorkingDays(count) {
+    const workingDays = [];
+    const today = moment();
+    let current = today.clone();
+
+    while (workingDays.length < count) {
+      // Если сегодня рабочий день или ищем предыдущие дни
+      if (current.isoWeekday() <= 5) { // Понедельник = 1, Пятница = 5
+        workingDays.unshift(current.clone());
+      }
+      current.subtract(1, 'day');
+    }
+
+    return workingDays;
   }
 
   // Защита от повторных нажатий
@@ -1244,6 +1512,492 @@ class TimeBot {
     }
 
     return { valid: true };
+  }
+
+  // ===== СИСТЕМА ЗАЯВОК НА ОТСУТСТВИЕ =====
+
+  async handleAbsence(msg) {
+    const chatId = msg.chat.id;
+    const telegramId = msg.from.id;
+
+    try {
+      const user = await this.getUser(telegramId);
+      if (!user) return await this.sendNotRegistered(chatId);
+
+      await this.showAbsenceTypes(chatId, user);
+    } catch (error) {
+      console.error('Ошибка в handleAbsence:', error);
+      await this.sendUserFriendlyError(chatId, 'command_error', { command: 'absence' });
+    }
+  }
+
+  async handleAbsences(msg) {
+    const chatId = msg.chat.id;
+    const telegramId = msg.from.id;
+
+    try {
+      const user = await this.getUser(telegramId);
+      if (!user) return await this.sendNotRegistered(chatId);
+
+      await this.showMyAbsences(chatId, user);
+    } catch (error) {
+      console.error('Ошибка в handleAbsences:', error);
+      await this.sendUserFriendlyError(chatId, 'command_error', { command: 'absences' });
+    }
+  }
+
+  async showAbsenceTypes(chatId, user) {
+    const keyboard = {
+      inline_keyboard: [
+        [
+          { text: '🌴 Отпуск', callback_data: 'absence_vacation' },
+          { text: '🤒 Больничный', callback_data: 'absence_sick' }
+        ],
+        [
+          { text: '🧳 Командировка', callback_data: 'absence_business_trip' },
+          { text: '🏠 Отгул', callback_data: 'absence_day_off' }
+        ],
+        [
+          { text: '📋 Мои заявки', callback_data: 'my_absences' }
+        ]
+      ]
+    };
+
+    const message = 
+      `📝 *Подача заявки на отсутствие*\n\n` +
+      `Выберите тип заявки:`;
+
+    await this.bot.sendMessage(chatId, message, { 
+      reply_markup: keyboard,
+      parse_mode: 'Markdown'
+    });
+  }
+
+  async showMyAbsences(chatId, user) {
+    try {
+      const absences = await Absence.findAll({
+        where: { userId: user.id },
+        order: [['createdAt', 'DESC']],
+        limit: 10,
+        include: [{
+          model: User,
+          as: 'approver',
+          attributes: ['name'],
+          required: false
+        }]
+      });
+
+      if (absences.length === 0) {
+        return await this.bot.sendMessage(chatId, 
+          '📋 У вас пока нет поданных заявок\n\n' +
+          'Используйте кнопку "📝 Подать заявку" в главном меню'
+        );
+      }
+
+      let message = `📋 *Ваши заявки на отсутствие*\n\n`;
+
+      absences.forEach((absence, index) => {
+        const statusEmoji = {
+          'pending': '⏳',
+          'approved': '✅',
+          'rejected': '❌'
+        }[absence.status];
+
+        const typeEmoji = {
+          'vacation': '🌴',
+          'sick': '🤒',
+          'business_trip': '🧳',
+          'day_off': '🏠'
+        }[absence.type];
+
+        const statusText = {
+          'pending': 'На рассмотрении',
+          'approved': 'Одобрена',
+          'rejected': 'Отклонена'
+        }[absence.status];
+
+        const typeText = {
+          'vacation': 'Отпуск',
+          'sick': 'Больничный', 
+          'business_trip': 'Командировка',
+          'day_off': 'Отгул'
+        }[absence.type];
+
+        message += `${index + 1}. ${typeEmoji} ${typeText}\n`;
+        message += `   📅 ${moment(absence.startDate).format('DD.MM.YY')} - ${moment(absence.endDate).format('DD.MM.YY')} (${absence.daysCount} дн.)\n`;
+        message += `   ${statusEmoji} ${statusText}`;
+        
+        if (absence.status === 'approved' && absence.approver) {
+          message += ` (${absence.approver.name})`;
+        }
+        
+        if (absence.status === 'rejected' && absence.rejectionReason) {
+          message += `\n   💬 ${absence.rejectionReason}`;
+        }
+        
+        message += '\n\n';
+      });
+
+      const webAppUrl = process.env.WEB_APP_URL || 'https://your-domain.com';
+      message += `🔗 [Подробнее в админке](${webAppUrl}/absences)`;
+
+      await this.bot.sendMessage(chatId, message, { 
+        parse_mode: 'Markdown',
+        disable_web_page_preview: true 
+      });
+    } catch (error) {
+      console.error('Ошибка в showMyAbsences:', error);
+      await this.sendUserFriendlyError(chatId, 'database_error');
+    }
+  }
+
+  async startAbsenceRequest(chatId, user, type) {
+    const typeText = {
+      'vacation': 'отпуск',
+      'sick': 'больничный',
+      'business_trip': 'командировку',
+      'day_off': 'отгул'
+    }[type];
+
+    const typeEmoji = {
+      'vacation': '🌴',
+      'sick': '🤒',
+      'business_trip': '🧳', 
+      'day_off': '🏠'
+    }[type];
+
+    // Устанавливаем состояние для сбора данных
+    this.userStates.set(user.telegramId, { 
+      state: 'absence_request',
+      type: type,
+      step: 'start_date'
+    });
+
+    await this.bot.sendMessage(chatId,
+      `${typeEmoji} *Заявка на ${typeText}*\n\n` +
+      `📅 Укажите дату начала в формате ДД.ММ.ГГГГ\n` +
+      `Например: 25.12.2024\n\n` +
+      `Или отправьте /cancel для отмены`,
+      { parse_mode: 'Markdown' }
+    );
+  }
+
+  async processAbsenceRequest(chatId, user, text) {
+    const state = this.userStates.get(user.telegramId);
+    if (!state || state.state !== 'absence_request') return;
+
+    try {
+      switch (state.step) {
+        case 'start_date':
+          const startDate = this.parseDate(text);
+          if (!startDate) {
+            return await this.bot.sendMessage(chatId,
+              '❌ Неверный формат даты. Используйте ДД.ММ.ГГГГ\n' +
+              'Например: 25.12.2024'
+            );
+          }
+
+          state.startDate = startDate;
+          state.step = 'end_date';
+          this.userStates.set(user.telegramId, state);
+
+          await this.bot.sendMessage(chatId,
+            `✅ Дата начала: ${moment(startDate).format('DD.MM.YYYY')}\n\n` +
+            `📅 Теперь укажите дату окончания в формате ДД.ММ.ГГГГ`
+          );
+          break;
+
+        case 'end_date':
+          const endDate = this.parseDate(text);
+          if (!endDate) {
+            return await this.bot.sendMessage(chatId,
+              '❌ Неверный формат даты. Используйте ДД.ММ.ГГГГ\n' +
+              'Например: 28.12.2024'
+            );
+          }
+
+          if (moment(endDate).isBefore(moment(state.startDate))) {
+            return await this.bot.sendMessage(chatId,
+              '❌ Дата окончания не может быть раньше даты начала'
+            );
+          }
+
+          state.endDate = endDate;
+          state.step = 'reason';
+          this.userStates.set(user.telegramId, state);
+
+          const days = moment(endDate).diff(moment(state.startDate), 'days') + 1;
+          await this.bot.sendMessage(chatId,
+            `✅ Период: ${moment(state.startDate).format('DD.MM.YYYY')} - ${moment(endDate).format('DD.MM.YYYY')} (${days} дн.)\n\n` +
+            `💬 Укажите причину или комментарий к заявке\n` +
+            `(необязательно, можете отправить "-" чтобы пропустить)`
+          );
+          break;
+
+        case 'reason':
+          const reason = text === '-' ? null : text;
+          state.reason = reason;
+          
+          // Создаём заявку
+          await this.createAbsenceRequest(chatId, user, state);
+          this.userStates.delete(user.telegramId);
+          break;
+      }
+    } catch (error) {
+      console.error('Ошибка в processAbsenceRequest:', error);
+      this.userStates.delete(user.telegramId);
+      await this.sendUserFriendlyError(chatId, 'database_error');
+    }
+  }
+
+  async createAbsenceRequest(chatId, user, requestData) {
+    try {
+      const absence = await Absence.create({
+        userId: user.id,
+        type: requestData.type,
+        startDate: requestData.startDate,
+        endDate: requestData.endDate,
+        reason: requestData.reason,
+        status: 'pending'
+      });
+
+      const typeText = {
+        'vacation': 'отпуск',
+        'sick': 'больничный',
+        'business_trip': 'командировку',
+        'day_off': 'отгул'
+      }[requestData.type];
+
+      const typeEmoji = {
+        'vacation': '🌴',
+        'sick': '🤒',
+        'business_trip': '🧳',
+        'day_off': '🏠'
+      }[requestData.type];
+
+      await this.bot.sendMessage(chatId,
+        `✅ *Заявка подана успешно!*\n\n` +
+        `${typeEmoji} Тип: ${typeText}\n` +
+        `📅 Период: ${moment(absence.startDate).format('DD.MM.YYYY')} - ${moment(absence.endDate).format('DD.MM.YYYY')}\n` +
+        `📊 Дней: ${absence.daysCount}\n` +
+        `💬 Причина: ${absence.reason || 'Не указана'}\n\n` +
+        `⏳ Статус: На рассмотрении\n\n` +
+        `📱 Вы получите уведомление, когда заявка будет рассмотрена`,
+        { parse_mode: 'Markdown' }
+      );
+
+      // Отправляем событие для уведомления менеджеров
+      emitEvent('absence.created', {
+        absence: absence,
+        user: user,
+        timestamp: new Date()
+      });
+
+    } catch (error) {
+      console.error('Ошибка создания заявки:', error);
+      await this.sendUserFriendlyError(chatId, 'database_error');
+    }
+  }
+
+  parseDate(dateStr) {
+    // Поддерживаем форматы: ДД.ММ.ГГГГ, ДД/ММ/ГГГГ, ДД-ММ-ГГГГ
+    const formats = ['DD.MM.YYYY', 'DD/MM/YYYY', 'DD-MM-YYYY'];
+    for (const format of formats) {
+      const parsed = moment(dateStr, format, true);
+      if (parsed.isValid()) {
+        return parsed.format('YYYY-MM-DD');
+      }
+    }
+    return null;
+  }
+
+  // ===== СИСТЕМА УПРАВЛЕНИЯ ЗАЯВКАМИ ДЛЯ МЕНЕДЖЕРОВ =====
+
+  async handleAbsenceManagement(callbackQuery, user) {
+    const chatId = callbackQuery.message.chat.id;
+    const data = callbackQuery.data;
+
+    try {
+      // Проверяем права менеджера
+      if (user.role !== 'manager' && user.role !== 'admin') {
+        await this.bot.answerCallbackQuery(callbackQuery.id, { 
+          text: '❌ Недостаточно прав', 
+          show_alert: true 
+        });
+        return;
+      }
+
+      const absenceId = data.split('_')[2];
+      const action = data.startsWith('approve_') ? 'approved' : 'rejected';
+
+      // Получаем заявку
+      const absence = await Absence.findByPk(absenceId, {
+        include: [{
+          model: User,
+          as: 'user',
+          attributes: ['id', 'name', 'telegramId']
+        }]
+      });
+
+      if (!absence) {
+        await this.bot.answerCallbackQuery(callbackQuery.id, { 
+          text: '❌ Заявка не найдена', 
+          show_alert: true 
+        });
+        return;
+      }
+
+      if (absence.status !== 'pending') {
+        await this.bot.answerCallbackQuery(callbackQuery.id, { 
+          text: '❌ Заявка уже рассмотрена', 
+          show_alert: true 
+        });
+        return;
+      }
+
+      if (action === 'rejected') {
+        // Для отклонения нужна причина - запрашиваем её
+        this.userStates.set(user.telegramId, {
+          state: 'rejecting_absence',
+          absenceId: absenceId
+        });
+
+        await this.bot.sendMessage(chatId,
+          '💬 *Укажите причину отклонения заявки:*\n\n' +
+          'Напишите причину или отправьте /cancel для отмены',
+          { parse_mode: 'Markdown' }
+        );
+
+        await this.bot.answerCallbackQuery(callbackQuery.id, { 
+          text: '💬 Укажите причину отклонения' 
+        });
+        return;
+      }
+
+      // Одобряем заявку
+      await this.processAbsenceDecision(absenceId, user, 'approved', null);
+      
+      await this.bot.answerCallbackQuery(callbackQuery.id, { 
+        text: '✅ Заявка одобрена!' 
+      });
+
+    } catch (error) {
+      console.error('Ошибка в handleAbsenceManagement:', error);
+      await this.bot.answerCallbackQuery(callbackQuery.id, { 
+        text: '❌ Ошибка обработки', 
+        show_alert: true 
+      });
+    }
+  }
+
+  async processAbsenceDecision(absenceId, approver, decision, reason = null) {
+    try {
+      const absence = await Absence.findByPk(absenceId, {
+        include: [{
+          model: User,
+          as: 'user',
+          attributes: ['id', 'name', 'telegramId']
+        }]
+      });
+
+      if (!absence) {
+        throw new Error('Заявка не найдена');
+      }
+
+      // Обновляем заявку
+      await absence.update({
+        status: decision,
+        approvedBy: approver.id,
+        approvedAt: new Date(),
+        rejectionReason: decision === 'rejected' ? reason : null
+      });
+
+      // Если одобрена - создаём записи в work_logs
+      if (decision === 'approved') {
+        await this.createWorkLogsForAbsence(absence);
+      }
+
+      // Отправляем событие уведомления
+      emitEvent('absence.decision', {
+        absence: absence,
+        user: absence.user,
+        decision,
+        reason,
+        approver,
+        timestamp: new Date()
+      });
+
+      const typeText = {
+        'vacation': 'отпуск',
+        'sick': 'больничный',
+        'business_trip': 'командировку',
+        'day_off': 'отгул'
+      }[absence.type];
+
+      const statusText = decision === 'approved' ? 'одобрена' : 'отклонена';
+      const statusEmoji = decision === 'approved' ? '✅' : '❌';
+
+      return `${statusEmoji} Заявка на ${typeText} ${statusText}`;
+
+    } catch (error) {
+      console.error('Ошибка обработки решения:', error);
+      throw error;
+    }
+  }
+
+  async createWorkLogsForAbsence(absence) {
+    const startDate = moment(absence.startDate);
+    const endDate = moment(absence.endDate);
+    const workLogs = [];
+
+    let currentDate = startDate.clone();
+    while (currentDate.isSameOrBefore(endDate)) {
+      // Пропускаем выходные (суббота = 6, воскресенье = 0)
+      if (currentDate.day() !== 0 && currentDate.day() !== 6) {
+        workLogs.push({
+          userId: absence.userId,
+          workDate: currentDate.format('YYYY-MM-DD'),
+          workMode: 'absent',
+          dailyReport: `${this.getAbsenceTypeText(absence.type)} (заявка #${absence.id})`,
+          totalMinutes: 0,
+          arrivedAt: null,
+          leftAt: null,
+          lunchStart: null,
+          lunchEnd: null
+        });
+      }
+      currentDate.add(1, 'day');
+    }
+
+    if (workLogs.length > 0) {
+      await WorkLog.bulkCreate(workLogs, {
+        updateOnDuplicate: ['workMode', 'dailyReport']
+      });
+    }
+  }
+
+  getAbsenceTypeText(type) {
+    const types = {
+      vacation: 'Отпуск',
+      sick: 'Больничный',
+      business_trip: 'Командировка',
+      day_off: 'Отгул'
+    };
+    return types[type] || type;
+  }
+
+  async processAbsenceRejection(chatId, user, reason, absenceId) {
+    try {
+      const result = await this.processAbsenceDecision(absenceId, user, 'rejected', reason);
+      
+      await this.bot.sendMessage(chatId,
+        `${result}\n\nПричина: ${reason}`,
+        { parse_mode: 'Markdown' }
+      );
+    } catch (error) {
+      console.error('Ошибка отклонения заявки:', error);
+      await this.bot.sendMessage(chatId, '❌ Ошибка при отклонении заявки');
+    }
   }
 }
 

@@ -9,6 +9,8 @@ const { notifyMissedWorklog } = require('../notifications/notifyMissedWorklog');
 const { notifyLogEdited } = require('../notifications/notifyLogEdited');
 const { notifyTeamStats } = require('../notifications/notifyTeamStats');
 const { notifyUserPromoted } = require('../notifications/notifyUserPromoted');
+const notifyAbsenceCreated = require('../notifications/notifyAbsenceCreated');
+const notifyAbsenceDecision = require('../notifications/notifyAbsenceDecision');
 
 /**
  * Инициализирует все слушатели событий
@@ -58,6 +60,24 @@ function initEventListeners() {
       await notifyUserPromoted(userData);
     } catch (err) {
       error('Ошибка при обработке user.promoted', { error: err.message, userData });
+    }
+  });
+
+  // Событие создания заявки на отсутствие
+  appEvents.on('absence.created', async (absenceData) => {
+    try {
+      await notifyAbsenceCreated(absenceData);
+    } catch (err) {
+      error('Ошибка при обработке absence.created', { error: err.message, absenceData });
+    }
+  });
+
+  // Событие принятия решения по заявке
+  appEvents.on('absence.decision', async (decisionData) => {
+    try {
+      await notifyAbsenceDecision(decisionData);
+    } catch (err) {
+      error('Ошибка при обработке absence.decision', { error: err.message, decisionData });
     }
   });
 

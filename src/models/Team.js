@@ -58,4 +58,26 @@ const Team = sequelize.define('Team', {
   underscored: true
 });
 
+Team.associate = function(models) {
+  // Team - Organization
+  Team.belongsTo(models.Organization, {
+    foreignKey: 'organizationId',
+    as: 'organization'
+  });
+
+  // Team - Manager
+  Team.belongsTo(models.User, {
+    foreignKey: 'managerId',
+    as: 'manager'
+  });
+
+  // User - Team (многие ко многим через UserTeam)
+  Team.belongsToMany(models.User, {
+    through: models.UserTeam,
+    foreignKey: 'teamId',
+    otherKey: 'userId',
+    as: 'members'
+  });
+};
+
 module.exports = Team; 

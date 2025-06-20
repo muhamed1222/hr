@@ -13,7 +13,11 @@ import TelegramDemo from '@/components/TelegramDemo'
 import DeepLinkDemo from '@/components/DeepLinkDemo'
 import DeepLinkTester from '@/components/DeepLinkTester'
 import EmployeeProfile from '@/pages/EmployeeProfile'
+import EmployeeList from '@/pages/EmployeeList'
+import Analytics from '@/pages/Analytics'
 import WorkLogs from '@/pages/WorkLogs'
+import Absences from '@/pages/Absences'
+import SystemConfig from '@/pages/SystemConfig'
 import TelegramApp from '@/components/TelegramApp'
 import TelegramDeepLink from '@/components/TelegramDeepLink'
 import DevModeToggle, { DevModeFloatingToggle } from '@/components/DevModeToggle'
@@ -25,6 +29,8 @@ import { useEffect } from 'react'
 import { initTelegramApp, isInsideTelegram } from '@/lib/telegram'
 import { useTelegramStartParam } from '@/hooks/useTelegramStartParam'
 import TelegramWebAppTesting from '@/pages/TelegramWebAppTesting'
+import OrganizationSettings from './pages/OrganizationSettings'
+import SystemMonitoring from './pages/SystemMonitoring'
 
 // Создаём клиент React Query
 const queryClient = new QueryClient({
@@ -173,10 +179,7 @@ function App() {
               element={
                 <ProtectedRoute>
                   <Layout>
-                    <div className="text-center py-8">
-                      <h2 className="text-2xl font-bold text-gray-900">Сотрудники</h2>
-                      <p className="text-gray-600 mt-2">Раздел в разработке</p>
-                    </div>
+                    <EmployeeList />
                   </Layout>
                 </ProtectedRoute>
               }
@@ -218,17 +221,70 @@ function App() {
             />
             
             <Route
+              path="/employees"
+              element={
+                <ProtectedRoute>
+                  <Layout>
+                    <EmployeeList />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
               path="/analytics"
               element={
                 <ProtectedRoute>
                   <Layout>
-                    <div className="text-center py-8">
-                      <h2 className="text-2xl font-bold text-gray-900">Аналитика</h2>
-                      <p className="text-gray-600 mt-2">Раздел в разработке</p>
-                    </div>
+                    <Analytics />
                   </Layout>
                 </ProtectedRoute>
               }
+            />
+
+            <Route
+              path="/absences"
+              element={
+                <ProtectedRoute>
+                  <Layout>
+                    <Absences />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+
+            {/* Системные настройки (только для админов) */}
+                        <Route 
+              path="/system-config" 
+              element={
+                <ProtectedRoute requiredRole="admin">
+                  <Layout>
+                    <SystemConfig />
+                  </Layout>
+                </ProtectedRoute>
+              } 
+            />
+            
+            <Route 
+              path="/organization-settings" 
+              element={
+                <ProtectedRoute requiredRole="admin">
+                  <Layout>
+                    <OrganizationSettings />
+                  </Layout>
+                </ProtectedRoute>
+              } 
+            />
+            
+            <Route 
+              path="/system-monitoring" 
+              element={
+                <ProtectedRoute requiredRole="admin">
+                  <Layout>
+                    <SystemMonitoring />
+                  </Layout>
+                </ProtectedRoute>
+              } 
             />
             
             <Route

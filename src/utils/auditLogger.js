@@ -47,7 +47,7 @@ class AuditLogger {
         metadata
       });
       
-      console.log(`📝 Аудит лог: ${action} ${resource} by admin ${adminId}`);
+      // // console.log(`📝 Аудит лог: ${action} ${resource} by admin ${adminId}`);
     } catch (error) {
       console.error('❌ Ошибка записи аудит лога:', error);
       // Не прерываем выполнение основного действия

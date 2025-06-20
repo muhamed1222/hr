@@ -11,17 +11,28 @@ import {
   Users, 
   BarChart3, 
   Settings, 
+  Cog,
   LogOut, 
   Menu,
-  X
+  X,
+  Building,
+  Monitor
 } from 'lucide-react'
 
 const navigation = [
   { name: 'Дашборд', href: '/', icon: LayoutDashboard },
   { name: 'Сотрудники', href: '/users', icon: Users },
+  { name: 'Заявки', href: '/absences', icon: () => <span className="text-base">📝</span> },
   { name: 'Аналитика', href: '/analytics', icon: BarChart3 },
   { name: 'Настройки', href: '/settings', icon: Settings },
 ]
+
+// Системные настройки только для админов
+const systemConfigNav = { 
+  name: 'Система', 
+  href: '/system-config', 
+  icon: Cog 
+}
 
 // Telegram админка только для админов в Telegram
 const telegramAdminNav = { 
@@ -43,7 +54,8 @@ export default function Layout({ children }) {
   // Подготавливаем навигацию с учетом Telegram админки
   const allNavigation = [
     ...navigation,
-    ...(user?.role === 'admin' ? [telegramAdminNav] : [])
+    ...(user?.role === 'admin' ? [telegramAdminNav] : []),
+    ...(user?.role === 'admin' ? [systemConfigNav] : [])
   ]
 
   const handleLogout = () => {
@@ -173,6 +185,29 @@ export default function Layout({ children }) {
                 </Link>
               )
             })}
+
+            {user.role === 'admin' && (
+              <>
+                <SidebarItem 
+                  to="/system-config" 
+                  icon={Cog} 
+                  label="Система" 
+                  isActive={location.pathname === '/system-config'} 
+                />
+                <SidebarItem 
+                  to="/organization-settings" 
+                  icon={Building} 
+                  label="Организация" 
+                  isActive={location.pathname === '/organization-settings'} 
+                />
+                <SidebarItem 
+                  to="/system-monitoring" 
+                  icon={Monitor} 
+                  label="Мониторинг" 
+                  isActive={location.pathname === '/system-monitoring'} 
+                />
+              </>
+            )}
           </nav>
         </div>
         

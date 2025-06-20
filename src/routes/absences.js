@@ -5,6 +5,7 @@ const { User, Absence, Team, UserTeam, WorkLog } = require('../models');
 const { authenticateToken } = require('../middleware/auth');
 const checkAbsencePermissions = require('../middleware/absencePermissions');
 const AuditLogger = require('../utils/auditLogger');
+const { emitEvent } = require('../events/eventEmitter');
 
 const router = express.Router();
 
@@ -467,6 +468,111 @@ router.patch('/:id/reject', checkAbsencePermissions.canApprove, async (req, res)
 });
 
 /**
+ * POST /api/absences/:id/decision - Принять решение по заявке
+ */
+router.post('/:id/decision', checkAbsencePermissions.canApprove, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { decision, rejectionReason } = req.body;
+    const approver = req.user;
+
+    if (!['approved', 'rejected'].includes(decision)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Неверное решение. Используйте approved или rejected'
+      });
+    }
+
+    const absence = await Absence.findByPk(id, {
+      include: [{
+        model: User,
+        as: 'user',
+        attributes: ['id', 'name', 'username', 'telegramId']
+      }]
+    });
+
+    if (!absence) {
+      return res.status(404).json({
+        success: false,
+        message: 'Заявка не найдена'
+      });
+    }
+
+    if (absence.status !== 'pending') {
+      return res.status(400).json({
+        success: false,
+        message: 'Заявка уже рассмотрена'
+      });
+    }
+
+    if (decision === 'rejected' && !rejectionReason) {
+      return res.status(400).json({
+        success: false,
+        message: 'Для отклонения заявки необходимо указать причину'
+      });
+    }
+
+    // Обновляем заявку
+    await absence.update({
+      status: decision,
+      approvedBy: approver.id,
+      approvedAt: new Date(),
+      rejectionReason: decision === 'rejected' ? rejectionReason : null
+    });
+
+    // Если одобрена - создаём записи в work_logs
+    if (decision === 'approved') {
+      await createWorkLogsForAbsence(absence);
+      await AuditLogger.logAbsenceApproved(approver.id, absence.id, req);
+    } else {
+      await AuditLogger.logAbsenceRejected(approver.id, absence.id, rejectionReason, req);
+    }
+
+    // Уведомляем сотрудника через систему событий
+    try {
+      emitEvent('absence.decision', {
+        absence: updatedAbsence,
+        user: absence.user,
+        decision,
+        reason: rejectionReason,
+        approver,
+        timestamp: new Date()
+      });
+    } catch (notificationError) {
+      console.error('Ошибка отправки уведомления:', notificationError);
+    }
+
+    const updatedAbsence = await Absence.findByPk(id, {
+      include: [
+        {
+          model: User,
+          as: 'user',
+          attributes: ['id', 'name', 'username']
+        },
+        {
+          model: User,
+          as: 'approver',
+          attributes: ['id', 'name', 'username']
+        }
+      ]
+    });
+
+    res.json({
+      success: true,
+      data: updatedAbsence,
+      message: `Заявка ${decision === 'approved' ? 'одобрена' : 'отклонена'}`
+    });
+
+  } catch (error) {
+    console.error('Ошибка принятия решения:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Ошибка принятия решения'
+    });
+  }
+});
+
+/**
  * DELETE /api/absences/:id - Удалить заявку
  */
 router.delete('/:id', checkAbsencePermissions.canEdit, async (req, res) => {
@@ -559,14 +665,14 @@ function getAbsenceTypeText(type) {
 // Уведомление менеджеров о новой заявке
 async function notifyManagersAboutNewRequest(user, absence) {
   // TODO: Реализовать Telegram уведомления
-  console.log(`Новая заявка от ${user.name}: ${getAbsenceTypeText(absence.type)} с ${absence.startDate} по ${absence.endDate}`);
+  // // console.log(`Новая заявка от ${user.name}: ${getAbsenceTypeText(absence.type)} с ${absence.startDate} по ${absence.endDate}`);
 }
 
 // Уведомление пользователя о решении
 async function notifyUserAboutDecision(user, absence, decision, reason = null) {
   // TODO: Реализовать Telegram уведомления
   const status = decision === 'approved' ? 'одобрена' : 'отклонена';
-  console.log(`Заявка ${user.name} ${status}. ${reason ? `Причина: ${reason}` : ''}`);
+  // // console.log(`Заявка ${user.name} ${status}. ${reason ? `Причина: ${reason}` : ''}`);
 }
 
 module.exports = router; 

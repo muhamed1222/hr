@@ -82,4 +82,18 @@ const WorkLog = sequelize.define('WorkLog', {
   ]
 });
 
+WorkLog.associate = function(models) {
+  // WorkLog - User
+  WorkLog.belongsTo(models.User, {
+    foreignKey: 'userId',
+    as: 'user'
+  });
+
+  // WorkLog - Organization
+  WorkLog.belongsTo(models.Organization, {
+    foreignKey: 'organizationId',
+    as: 'organization'
+  });
+};
+
 module.exports = WorkLog; 

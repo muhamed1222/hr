@@ -36,7 +36,7 @@ class CacheService {
         });
 
         this.redis.on('connect', () => {
-          console.log('✅ Redis подключен для кэширования');
+          // // console.log('✅ Redis подключен для кэширования');
           this.isRedisAvailable = true;
         });
 

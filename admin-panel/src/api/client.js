@@ -1,7 +1,7 @@
 import axios from 'axios'
 import toast from 'react-hot-toast'
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api'
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000'
 
 // Создаём экземпляр axios
 const apiClient = axios.create({
@@ -70,4 +70,5 @@ apiClient.interceptors.response.use(
   }
 )
 
-export default apiClient 
+export default apiClient
+export { apiClient } 

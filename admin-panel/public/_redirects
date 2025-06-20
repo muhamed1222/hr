@@ -1,0 +1,7 @@
+# Обработка SPA маршрутов
+/*    /index.html   200
+
+# Правильные MIME типы для JavaScript модулей
+/assets/*.js    /assets/:splat.js   200
+/*.js    /:splat.js   200
+/*.css    /:splat.css   200 

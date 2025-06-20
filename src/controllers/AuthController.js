@@ -109,7 +109,7 @@ class AuthController {
     
     res.json({
       success: true,
-      user: AuthService._sanitizeUser ? AuthService._sanitizeUser(user) : user
+      user: AuthService._sanitizeUser(user)
     });
   });
 

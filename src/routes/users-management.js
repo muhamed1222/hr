@@ -237,7 +237,7 @@ router.post('/', requireRole(['admin']), async (req, res) => {
 
         await sendTelegramMessage(req.user.telegramId, inviteMessage);
       } catch (telegramError) {
-        console.log('Не удалось отправить приглашение через Telegram:', telegramError);
+        // // console.log('Не удалось отправить приглашение через Telegram:', telegramError);
       }
     }
 
@@ -492,7 +492,7 @@ router.post('/:id/reset-password', requireRole(['admin']), async (req, res) => {
         const passwordMessage = `🔐 Ваш пароль был сброшен\n\nНовый пароль: ${newPassword}\n\nРекомендуем сменить его после входа в систему.`;
         await sendTelegramMessage(user.telegramId, passwordMessage);
       } catch (telegramError) {
-        console.log('Не удалось отправить пароль через Telegram:', telegramError);
+        // // console.log('Не удалось отправить пароль через Telegram:', telegramError);
       }
     }
 

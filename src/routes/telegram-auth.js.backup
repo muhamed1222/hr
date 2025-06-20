@@ -19,7 +19,7 @@ function verifyTelegramInitData(initData, botToken) {
     const hash = urlParams.get('hash');
     
     if (!hash) {
-      console.log('❌ Telegram auth: отсутствует hash');
+      // // console.log('❌ Telegram auth: отсутствует hash');
       return false;
     }
     
@@ -46,11 +46,6 @@ function verifyTelegramInitData(initData, botToken) {
     
     const isValid = computedHash === hash;
     
-    console.log('🔐 Telegram auth validation:', {
-      provided: hash,
-      computed: computedHash,
-      valid: isValid
-    });
     
     return isValid;
   } catch (error) {
@@ -70,19 +65,8 @@ function parseTelegramUser(initData) {
     const userString = urlParams.get('user');
     
     if (!userString) {
-      console.log('❌ Telegram auth: отсутствуют данные пользователя');
+      // // console.log('❌ Telegram auth: отсутствуют данные пользователя');
       return null;
-    }
-    
-    const userData = JSON.parse(decodeURIComponent(userString));
-    
-    console.log('👤 Telegram user data:', {
-      id: userData.id,
-      username: userData.username,
-      first_name: userData.first_name,
-      last_name: userData.last_name
-    });
-    
     return userData;
   } catch (error) {
     console.error('❌ Ошибка парсинга данных пользователя:', error);
@@ -111,7 +95,7 @@ async function findOrCreateUserByTelegram(telegramUser) {
         last_login: new Date()
       });
       
-      console.log('✅ Найден существующий пользователь:', user.username);
+      // // console.log('✅ Найден существующий пользователь:', user.username);
       return user;
     }
     
@@ -131,7 +115,7 @@ async function findOrCreateUserByTelegram(telegramUser) {
       last_login: new Date()
     });
     
-    console.log('🆕 Создан новый пользователь из Telegram:', user.username);
+    // // console.log('🆕 Создан новый пользователь из Telegram:', user.username);
     return user;
   } catch (error) {
     console.error('❌ Ошибка поиска/создания пользователя:', error);
@@ -204,7 +188,7 @@ router.post('/telegram-login', async (req, res) => {
       ip: req.ip
     });
     
-    console.log('✅ Успешная Telegram аутентификация:', {
+    // // console.log('✅ Успешная Telegram аутентификация:', {
       userId: user.id,
       username: user.username,
       telegramId: user.telegram_id

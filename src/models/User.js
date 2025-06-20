@@ -91,4 +91,54 @@ const User = sequelize.define('User', {
   underscored: true
 });
 
+User.associate = function(models) {
+  // User - Organization
+  User.belongsTo(models.Organization, {
+    foreignKey: 'organizationId',
+    as: 'organization'
+  });
+
+  // User - WorkLog
+  User.hasMany(models.WorkLog, {
+    foreignKey: 'userId',
+    as: 'workLogs'
+  });
+
+  // User - Team (многие ко многим через UserTeam)
+  User.belongsToMany(models.Team, {
+    through: models.UserTeam,
+    foreignKey: 'userId',
+    otherKey: 'teamId',
+    as: 'teams'
+  });
+
+  // Team - Manager
+  User.hasMany(models.Team, {
+    foreignKey: 'managerId',
+    as: 'managedTeams'
+  });
+
+  // AuditLog associations
+  User.hasMany(models.AuditLog, {
+    foreignKey: 'userId',
+    as: 'auditLogs'
+  });
+
+  User.hasMany(models.AuditLog, {
+    foreignKey: 'adminId',
+    as: 'adminActions'
+  });
+
+  // Absence associations
+  User.hasMany(models.Absence, {
+    foreignKey: 'userId',
+    as: 'absences'
+  });
+
+  User.hasMany(models.Absence, {
+    foreignKey: 'approvedBy',
+    as: 'approvedAbsences'
+  });
+};
+
 module.exports = User; 

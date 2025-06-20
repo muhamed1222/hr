@@ -33,7 +33,7 @@ async function getUsersForMorningReminder() {
       return !todayLog || !todayLog.arrivedAt;
     });
 
-    console.log(`🌅 Утренние напоминания: найдено ${usersToRemind.length} пользователей`);
+    // // console.log(`🌅 Утренние напоминания: найдено ${usersToRemind.length} пользователей`);
     return usersToRemind;
 
   } catch (error) {
@@ -67,7 +67,7 @@ async function getUsersForLunchStartReminder() {
       }]
     });
 
-    console.log(`🍱 Напоминания об обеде: найдено ${users.length} пользователей`);
+    // // console.log(`🍱 Напоминания об обеде: найдено ${users.length} пользователей`);
     return users;
 
   } catch (error) {
@@ -101,7 +101,7 @@ async function getUsersForLunchEndReminder() {
       }]
     });
 
-    console.log(`🔙 Напоминания об окончании обеда: найдено ${users.length} пользователей`);
+    // // console.log(`🔙 Напоминания об окончании обеда: найдено ${users.length} пользователей`);
     return users;
 
   } catch (error) {
@@ -139,7 +139,7 @@ async function getUsersForEveningReminder() {
       }]
     });
 
-    console.log(`🌆 Вечерние напоминания: найдено ${users.length} пользователей`);
+    // // console.log(`🌆 Вечерние напоминания: найдено ${users.length} пользователей`);
     return users;
 
   } catch (error) {
