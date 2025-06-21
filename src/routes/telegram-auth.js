@@ -3,6 +3,7 @@ const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const { User } = require('../models');
 const { auditLogger } = require('../utils/auditLogger');
+const { HTTP_STATUS_CODES } = require('../constants');
 
 const router = express.Router();
 
@@ -135,7 +136,7 @@ router.post('/telegram-login', async (req, res) => {
     const { initData } = req.body;
     
     if (!initData) {
-      return res.status(400).json({
+      return res.status(HTTP_STATUS_CODES.BAD_REQUEST).json({
         error: 'Отсутствуют данные инициализации Telegram'
       });
     }
@@ -144,7 +145,7 @@ router.post('/telegram-login', async (req, res) => {
     const botToken = process.env.TELEGRAM_BOT_TOKEN;
     if (!botToken) {
       console.error('❌ Не настроен TELEGRAM_BOT_TOKEN');
-      return res.status(500).json({
+      return res.status(HTTP_STATUS_CODES.INTERNAL_SERVER_ERROR).json({
         error: 'Telegram аутентификация не настроена'
       });
     }
@@ -156,7 +157,7 @@ router.post('/telegram-login', async (req, res) => {
         initData: initData.substring(0, 100) // Логируем только начало для безопасности
       });
       
-      return res.status(403).json({
+      return res.status(HTTP_STATUS_CODES.FORBIDDEN).json({
         error: 'Недействительная подпись Telegram'
       });
     }
@@ -164,7 +165,7 @@ router.post('/telegram-login', async (req, res) => {
     // Парсим данные пользователя
     const telegramUser = parseTelegramUser(initData);
     if (!telegramUser) {
-      return res.status(400).json({
+      return res.status(HTTP_STATUS_CODES.BAD_REQUEST).json({
         error: 'Не удалось получить данные пользователя из Telegram'
       });
     }
@@ -198,6 +199,7 @@ router.post('/telegram-login', async (req, res) => {
     // });
     
     res.json({
+      success: true,
       token,
       user: {
         id: user.id,
@@ -205,37 +207,27 @@ router.post('/telegram-login', async (req, res) => {
         name: user.name,
         role: user.role,
         telegram_id: user.telegram_id,
-        telegram_username: user.telegram_username,
-        telegram_first_name: user.telegram_first_name,
-        telegram_last_name: user.telegram_last_name
+        telegram_username: user.telegram_username
       }
     });
-    
   } catch (error) {
-    console.error('❌ Ошибка Telegram аутентификации:', error);
-    
-    // Логируем ошибку
-    await auditLogger.logSecurityEvent(null, 'telegram_auth_error', {
-      error: error.message,
-      ip: req.ip
-    });
-    
-    res.status(500).json({
-      error: 'Внутренняя ошибка сервера при аутентификации'
+    console.error('❌ Ошибка аутентификации через Telegram:', error);
+    res.status(HTTP_STATUS_CODES.INTERNAL_SERVER_ERROR).json({
+      error: 'Внутренняя ошибка сервера'
     });
   }
 });
 
 /**
  * GET /api/auth/telegram-status
- * Проверка статуса Telegram аутентификации
+ * Проверка статуса Telegram бота
  */
 router.get('/telegram-status', (req, res) => {
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
   
   res.json({
-    enabled: !!botToken,
-    configured: !!botToken
+    enabled: !!botToken && botToken !== 'placeholder',
+    bot_username: process.env.TELEGRAM_BOT_USERNAME || null
   });
 });
 

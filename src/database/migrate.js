@@ -1,6 +1,6 @@
 "use strict";
 
-const { _info, _error, _warn, _debug } = require("../utils/logger");
+const { logger } = require("../config/logging");
 
 const _fs = require("fs");
 const _path = require("path");
@@ -8,20 +8,20 @@ const sequelize = require("../config/database");
 
 async function migrate() {
   try {
-    // // info('🔄 Начинаем миграцию базы данных...');
+    console.log('🔄 Начинаем миграцию базы данных...');
 
     // Проверяем подключение
     await sequelize.authenticate();
-    // // info('✅ Подключение к базе данных установлено');
+    console.log('✅ Подключение к базе данных установлено');
 
     // Синхронизируем модели (создаём таблицы)
     await sequelize.sync({ force: process.env.NODE_ENV === "development" });
-    // // info('✅ Модели синхронизированы');
+    console.log('✅ Модели синхронизированы');
 
-    // // info('🎉 Миграция завершена успешно!');
+    console.log('🎉 Миграция завершена успешно!');
     process.exit(0);
   } catch (error) {
-    _error("❌ Ошибка миграции:", error);
+    console.error("❌ Ошибка миграции:", error);
     process.exit(1);
   }
 }

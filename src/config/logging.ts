@@ -1,3 +1,4 @@
+import { Request, Response, NextFunction } from 'express';
 import winston from 'winston';
 import path from 'path';
 import 'winston-daily-rotate-file';
@@ -56,12 +57,19 @@ const consoleTransport = new winston.transports.Console({
   format: consoleFormat
 });
 
-export const logger = winston.createLogger({
+const logger = winston.createLogger({
   level: process.env.LOG_LEVEL || 'info',
+  format: winston.format.combine(
+    winston.format.timestamp(),
+    winston.format.json()
+  ),
   transports: [
-    errorFileTransport,
-    combinedFileTransport,
-    consoleTransport
+    new winston.transports.Console({
+      format: winston.format.combine(
+        winston.format.colorize(),
+        winston.format.simple()
+      )
+    })
   ]
 });
 
@@ -97,15 +105,17 @@ export const requestLogger = (req: any, res: any, next: () => void) => {
 };
 
 // Создаем функцию для логирования ошибок
-export const errorLogger = (err: Error, req: any, res: any, next: () => void) => {
-  logger.error('Unhandled Error', {
-    error: err.message,
+export const errorLogger = (err: Error, req: Request, res: Response, next: NextFunction) => {
+  logger.error('Error:', {
+    message: err.message,
     stack: err.stack,
-    url: req.url,
+    path: req.path,
     method: req.method,
-    body: req.body
+    body: req.body,
+    query: req.query,
+    params: req.params
   });
-  next(err);
+  next();
 };
 
 // Создаем функцию для логирования событий безопасности
@@ -114,4 +124,6 @@ export const logSecurityEvent = (event: string, data: Record<string, any>) => {
     timestamp: new Date().toISOString(),
     ...data
   });
-}; 
+};
+
+export default logger; 

@@ -445,7 +445,7 @@ router.delete("/:id", requireRole(["admin"]), async (req, res) => {
 /**
  * Сброс Telegram ID
  */
-router.post("/:id/reset-telegram", requireRole(["admin"]), async (req, res) => {
+router.post("/reset-telegram/:id", requireRole(["admin"]), async (req, res) => {
   try {
     const { id } = req.params;
 

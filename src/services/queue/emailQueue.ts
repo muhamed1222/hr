@@ -1,73 +1,71 @@
-import { QueueManager, QueueConfig } from './QueueManager';
-import { Redis } from 'ioredis';
-import { logger } from '../../config/logging';
-import Queue from 'bull';
+import logger from '../../config/logging';
+import { sendEmail } from '../email/emailService';
 
 interface EmailJob {
   to: string;
   subject: string;
-  body: string;
-  attachments?: Array<{
-    filename: string;
-    content: string;
-  }>;
+  text: string;
+  html?: string;
 }
 
-export class EmailQueue {
-  private queueManager: QueueManager;
-  private readonly QUEUE_NAME = 'email';
+class EmailQueue {
+  private static instance: EmailQueue;
+  private queue: EmailJob[] = [];
+  private processing: boolean = false;
+  private maxRetries: number = 3;
+  private retryDelay: number = 5000;
 
-  constructor(redis: Redis) {
-    this.queueManager = new QueueManager();
-    
-    const config: QueueConfig = {
-      redis,
-      name: this.QUEUE_NAME,
-      options: {
-        defaultJobOptions: {
-          attempts: 3,
-          backoff: {
-            type: 'exponential',
-            delay: 1000,
-          },
-        },
-      },
-    };
-
-    const queue = this.queueManager.createQueue(config);
-    this.setupProcessor(queue);
+  private constructor() {
+    this.startProcessing();
   }
 
-  private setupProcessor(queue: Queue.Queue<EmailJob>): void {
-    this.queueManager.processQueue<EmailJob>(this.QUEUE_NAME, async (job) => {
-      const { to, subject, body, attachments } = job.data;
-      
+  public static getInstance(): EmailQueue {
+    if (!EmailQueue.instance) {
+      EmailQueue.instance = new EmailQueue();
+    }
+    return EmailQueue.instance;
+  }
+
+  private async startProcessing(): Promise<void> {
+    if (this.processing) {
+      return;
+    }
+
+    this.processing = true;
+    while (this.queue.length > 0) {
+      const job = this.queue[0];
       try {
-        logger.info(`Sending email to ${to}`);
-        // Здесь будет реальная отправка email
-        await this.mockSendEmail(job.data);
-        logger.info(`Email sent successfully to ${to}`);
+        await this.processEmail(job);
+        this.queue.shift();
       } catch (error) {
-        logger.error(`Failed to send email to ${to}:`, error);
-        throw error;
+        logger.error('Email queue error:', error);
+        // Перемещаем неудачную задачу в конец очереди
+        this.queue.shift();
+        this.queue.push(job);
+        await new Promise(resolve => setTimeout(resolve, this.retryDelay));
       }
-    });
+    }
+    this.processing = false;
   }
 
-  private async mockSendEmail(data: EmailJob): Promise<void> {
-    // Имитация отправки email
-    await new Promise(resolve => setTimeout(resolve, 1000));
+  private async processEmail(job: EmailJob): Promise<void> {
+    try {
+      await sendEmail(job);
+      logger.info(`Email sent successfully to ${job.to}`);
+    } catch (error) {
+      logger.error(`Failed to send email to ${job.to}:`, error);
+      throw error;
+    }
   }
 
-  async addToQueue(emailData: EmailJob): Promise<void> {
-    await this.queueManager.addJob(this.QUEUE_NAME, emailData, {
-      priority: 1,
-      attempts: 3,
-      removeOnComplete: true,
-    });
+  public async addToQueue(emailData: EmailJob): Promise<void> {
+    this.queue.push(emailData);
+    this.startProcessing();
   }
 
-  async close(): Promise<void> {
-    await this.queueManager.closeAll();
+  public getQueueLength(): number {
+    return this.queue.length;
   }
-} 
+}
+
+export default EmailQueue.getInstance(); 

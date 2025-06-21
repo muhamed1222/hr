@@ -2,48 +2,18 @@
 
 const { Sequelize } = require("sequelize");
 require("dotenv").config();
-const { debug: _debug } = require("../utils/logger");
+const { logger } = require("./logging");
 const { LIMITS } = require("../constants");
 
-// Конфигурация PostgreSQL
-const sequelize = process.env.DATABASE_URL 
-  ? new Sequelize(process.env.DATABASE_URL, {
-      dialect: "postgres",
-      logging: process.env.NODE_ENV === "development"
-        ? (sql) => _debug("SQL запрос (PostgreSQL)", { sql })
-        : false,
-      dialectOptions: {
-        ssl: process.env.NODE_ENV === "production"
-          ? {
-              require: true,
-              rejectUnauthorized: false,
-            }
-          : false,
-      },
-      pool: {
-        max: 5,
-        min: 0,
-        acquire: 30000,
-        idle: LIMITS.MAX_PAGE_SIZE00,
-      },
-    })
-  : new Sequelize({
-      host: process.env.DB_HOST,
-      port: process.env.DB_PORT,
-      database: process.env.DB_NAME,
-      username: process.env.DB_USER,
-      password: process.env.DB_PASSWORD,
-      dialect: "postgres",
-      logging: process.env.NODE_ENV === "development"
-        ? (sql) => _debug("SQL запрос (PostgreSQL)", { sql })
-        : false,
-      timezone: process.env.TZ || "Europe/Moscow",
-      pool: {
-        max: 5,
-        min: 0,
-        acquire: 30000,
-        idle: LIMITS.MAX_PAGE_SIZE00,
-      },
-    });
+// Конфигурация базы данных
+const sequelize = new Sequelize({
+  dialect: 'postgres',
+  host: process.env.DB_HOST || 'localhost',
+  port: parseInt(process.env.DB_PORT || '5432', 10),
+  username: process.env.DB_USER || 'hr_user',
+  password: process.env.DB_PASSWORD || 'your_password',
+  database: process.env.DB_NAME || 'hr_db',
+  logging: (msg) => logger.debug(msg)
+});
 
 module.exports = sequelize;

@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { AppError } from '../services/errors/AppError';
-import { logger } from '../config/logging';
+import logger from '../config/logging';
 
 export const errorHandler = (
   err: Error,
@@ -8,35 +8,19 @@ export const errorHandler = (
   res: Response,
   next: NextFunction
 ) => {
-  if (err instanceof AppError) {
-    // Operational, trusted error: send message to client
-    logger.warn({
-      message: err.message,
-      code: err.code,
-      statusCode: err.statusCode,
-      details: err.details,
-      path: req.path,
-      method: req.method,
-    });
+  logger.error(err);
 
+  if (err instanceof AppError) {
     return res.status(err.statusCode).json({
-      code: err.code,
       message: err.message,
-      details: err.details,
+      isOperational: err.isOperational,
     });
   }
 
-  // Programming or other unknown error: don't leak error details
-  logger.error({
-    message: err.message,
-    stack: err.stack,
-    path: req.path,
-    method: req.method,
-  });
-
+  // Непредвиденная ошибка
   return res.status(500).json({
-    code: 'INTERNAL_SERVER_ERROR',
-    message: 'Internal server error',
+    message: 'Внутренняя ошибка сервера',
+    isOperational: false,
   });
 };
 

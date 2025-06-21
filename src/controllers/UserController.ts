@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { CacheManager } from '../services/cache/CacheManager';
-import { ValidationError } from '../services/errors/AppError';
-import { logger } from '../config/logging';
+import { AppError } from '../services/errors/AppError';
+import logger from '../config/logging';
 
 export class UserController {
   constructor(private cacheManager: CacheManager) {}
@@ -55,7 +55,7 @@ export class UserController {
       try {
         const { id } = req.params;
         if (!id) {
-          throw new ValidationError('User ID is required');
+          throw AppError.ValidationError('User ID is required');
         }
 
         const cacheKey = this.getUserCacheKey(id);
@@ -70,7 +70,7 @@ export class UserController {
         );
 
         if (!user) {
-          throw new ValidationError('User not found');
+          throw AppError.ValidationError('User not found');
         }
 
         res.json(user);
@@ -90,7 +90,7 @@ export class UserController {
         const { email, firstName, lastName } = req.body;
 
         if (!email) {
-          throw new ValidationError('Email is required');
+          throw AppError.ValidationError('Email is required');
         }
 
         // Здесь будет создание пользователя в базе данных
@@ -117,7 +117,7 @@ export class UserController {
         const { email, firstName, lastName } = req.body;
 
         if (!id) {
-          throw new ValidationError('User ID is required');
+          throw AppError.ValidationError('User ID is required');
         }
 
         // Здесь будет обновление пользователя в базе данных

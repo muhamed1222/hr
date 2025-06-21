@@ -1,99 +1,83 @@
 import { Redis } from 'ioredis';
-import { logger } from '../../config/logging';
+import logger from '../../config/logging';
+import redisClient from '../../config/redis';
 
-export interface CacheOptions {
-  ttl?: number;
+interface CacheOptions {
   prefix?: string;
+  defaultTTL?: number;
+}
+
+interface CacheEntry {
+  value: any;
+  expiresAt?: number;
 }
 
 export class CacheManager {
-  private readonly redis: Redis;
-  private readonly defaultTTL: number = 3600; // 1 hour in seconds
   private readonly prefix: string;
+  private readonly defaultTTL: number;
+  private readonly redis: Redis;
 
-  constructor(redis: Redis, options: CacheOptions = {}) {
-    this.redis = redis;
+  constructor(options: CacheOptions = {}) {
     this.prefix = options.prefix || 'cache:';
+    this.defaultTTL = options.defaultTTL || 3600; // 1 hour
+    this.redis = redisClient;
   }
 
   private getKey(key: string): string {
     return `${this.prefix}${key}`;
   }
 
-  async get<T>(key: string): Promise<T | null> {
+  async get(key: string): Promise<any> {
     try {
-      const data = await this.redis.get(this.getKey(key));
-      if (!data) return null;
-      return JSON.parse(data) as T;
+      const value = await this.redis.get(this.getKey(key));
+      return value ? JSON.parse(value) : null;
     } catch (error) {
-      logger.error(`Error getting cache key ${key}:`, error);
+      logger.error('Cache get error:', error);
       return null;
     }
   }
 
-  async set<T>(
-    key: string,
-    value: T,
-    ttl: number = this.defaultTTL
-  ): Promise<boolean> {
+  async set(key: string, value: any, ttl?: number): Promise<void> {
     try {
-      const data = JSON.stringify(value);
-      await this.redis.set(this.getKey(key), data, 'EX', ttl);
-      return true;
+      const serializedValue = JSON.stringify(value);
+      if (ttl) {
+        await this.redis.setex(this.getKey(key), ttl, serializedValue);
+      } else {
+        await this.redis.set(this.getKey(key), serializedValue);
+      }
     } catch (error) {
-      logger.error(`Error setting cache key ${key}:`, error);
-      return false;
+      logger.error('Cache set error:', error);
     }
   }
 
-  async delete(key: string): Promise<boolean> {
+  async delete(key: string): Promise<void> {
     try {
-      const result = await this.redis.del(this.getKey(key));
-      return result === 1;
+      await this.redis.del(this.getKey(key));
     } catch (error) {
-      logger.error(`Error deleting cache key ${key}:`, error);
-      return false;
-    }
-  }
-
-  async has(key: string): Promise<boolean> {
-    try {
-      const exists = await this.redis.exists(this.getKey(key));
-      return exists === 1;
-    } catch (error) {
-      logger.error(`Error checking cache key ${key}:`, error);
-      return false;
+      logger.error('Cache delete error:', error);
     }
   }
 
   async clear(pattern?: string): Promise<void> {
     try {
-      const searchPattern = pattern
-        ? this.getKey(pattern)
-        : `${this.prefix}*`;
-      
+      const searchPattern = pattern ? `${this.prefix}${pattern}*` : `${this.prefix}*`;
       const keys = await this.redis.keys(searchPattern);
       if (keys.length > 0) {
         await this.redis.del(...keys);
       }
     } catch (error) {
-      logger.error('Error clearing cache:', error);
+      logger.error('Cache clear error:', error);
     }
   }
 
-  // Метод для кэширования результатов функции
-  async remember<T>(
-    key: string,
-    ttl: number,
-    callback: () => Promise<T>
-  ): Promise<T> {
-    const cached = await this.get<T>(key);
-    if (cached !== null) {
-      return cached;
+  async remember(key: string, ttl: number, callback: () => Promise<any>): Promise<any> {
+    const cachedValue = await this.get(key);
+    if (cachedValue !== null) {
+      return cachedValue;
     }
 
-    const fresh = await callback();
-    await this.set(key, fresh, ttl);
-    return fresh;
+    const value = await callback();
+    await this.set(key, value, ttl);
+    return value;
   }
 } 

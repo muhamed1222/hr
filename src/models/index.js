@@ -1,13 +1,13 @@
 "use strict";
 
 const { Sequelize } = require("sequelize");
-const { logger } = require("../utils/logger");
+const { logger } = require("../config/logging");
 
 // Конфигурация базы данных
 const sequelize = new Sequelize({
   dialect: "sqlite",
   storage: "database.sqlite",
-  logging: process.env.NODE_ENV === "development" ? logger.info : false,
+  logging: process.env.NODE_ENV === "development" ? (msg) => logger.debug(msg) : false,
 });
 
 // Загрузка определений моделей

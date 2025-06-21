@@ -8,20 +8,21 @@ const securityConfig = {
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      imgSrc: ["'self'", "data:", "https:"],
-      connectSrc: ["'self'", "https://api.telegram.org"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://yastatic.net"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https:", "https://yastatic.net"],
+      imgSrc: ["'self'", "data:", "https:", "blob:", "https://yastatic.net"],
+      connectSrc: ["'self'", "https://api.telegram.org", "http://localhost:*", "ws://localhost:*", "https://yastatic.net"],
       frameSrc: ["'self'", "https://t.me"],
+      fontSrc: ["'self'", "data:", "https:", "https://yastatic.net"],
       upgradeInsecureRequests: []
     }
   },
 
   // Настройки CORS
   cors: {
-    origin: process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:3000'],
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    origin: process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:3000', 'http://localhost:5173', 'http://localhost:5177'],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-XSRF-TOKEN'],
     exposedHeaders: ['Content-Range', 'X-Content-Range'],
     credentials: true,
     maxAge: 600
@@ -44,21 +45,11 @@ const securityConfig = {
 // Middleware конфигурации
 const configureSecurityMiddleware = (app) => {
   // Helmet middleware
-  app.use(helmet(securityConfig.contentSecurityPolicy));
-
-  // Rate limiting
-  const limiter = rateLimit({
-    windowMs: securityConfig.rateLimiting.window,
-    max: securityConfig.rateLimiting.max,
-    message: {
-      status: 'error',
-      message: 'Слишком много запросов. Попробуйте позже.',
-      errorCode: 'ERR_RATE_LIMIT'
-    }
-  });
-
-  // Применяем rate limiting к API маршрутам
-  app.use('/api/', limiter);
+  app.use(helmet({
+    ...securityConfig.contentSecurityPolicy,
+    crossOriginEmbedderPolicy: false,
+    crossOriginResourcePolicy: { policy: "cross-origin" }
+  }));
 
   // Особые настройки rate limiting для критических эндпоинтов
   const strictLimiter = rateLimit({

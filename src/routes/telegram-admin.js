@@ -1,6 +1,7 @@
 "use strict";
 
 const { info: _info, error: _error, warn: _warn, debug: _debug } = require("../utils/logger");
+const { HTTP_STATUS_CODES, LIMITS } = require("../constants");
 
 const express = require("express");
 const { Op } = require("sequelize");
@@ -167,6 +168,7 @@ router.get("/employees", async (req, res) => {
     // // info(`📋 Telegram admin: загружен список из ${employeesData.length} сотрудников`);
 
     res.json({
+      success: true,
       employees: employeesData,
       summary: {
         total: employeesData.length,
@@ -180,8 +182,11 @@ router.get("/employees", async (req, res) => {
   } catch (error) {
     _error("❌ Ошибка получения списка сотрудников:", error);
     res
-      .status(LIMITS.DEFAULT_PAGE_SIZE0)
-      .json({ error: "Ошибка сервера при получении данных" });
+      .status(HTTP_STATUS_CODES.INTERNAL_SERVER_ERROR)
+      .json({ 
+        success: false,
+        error: "Ошибка сервера при получении данных" 
+      });
   }
 });
 

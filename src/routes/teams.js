@@ -546,11 +546,11 @@ router.delete(
  * Изменить роль участника в команде
  */
 router.patch(
-  "/:id/members/:userId",
+  "/members/:teamId/:userId/role",
   requireRole(["admin"]),
   async (req, res) => {
     try {
-      const { id, userId } = req.params;
+      const { teamId, userId } = req.params;
       const { role } = req.body;
 
       if (!role || !["member", "lead", "manager"].includes(role)) {
@@ -561,7 +561,7 @@ router.patch(
       }
 
       const membership = await UserTeam.findOne({
-        where: { userId, teamId: id, status: "active" },
+        where: { userId, teamId, status: "active" },
       });
 
       if (!membership) {
@@ -579,13 +579,13 @@ router.patch(
         userId: parseInt(userId),
         action: "update_team_role",
         resource: "teams",
-        resourceId: id,
+        resourceId: teamId,
         description: `Изменена роль в команде с ${oldRole} на ${role}`,
         oldValues: { role: oldRole },
         newValues: { role },
         ipAddress: req.clientIP,
         userAgent: req.userAgent,
-        metadata: { teamId: id },
+        metadata: { teamId },
       });
 
       res.json({

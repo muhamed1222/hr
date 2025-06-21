@@ -1,21 +1,26 @@
-const { error: _error, warn: _warn, info: _info } = require('../utils/logger');
-const { LIMITS, TIME_CONSTANTS } = require('../constants');
+"use strict";
+
+const { _info, _warn, _error } = require('../config/logging');
+const { LIMITS, TIME_CONSTANTS, MAX_REDIS_RECONNECT_ATTEMPTS, REDIS_RECONNECT_DELAY } = require('../constants');
 const { createClient } = require('redis');
 const AuditLog = require('../models/AuditLog');
 const geoip = require('geoip-lite');
 const logger = require('../config/logging');
 const { AppError } = require('./errors/AppError');
 
+/**
+ * Сервис мониторинга безопасности
+ * Временно работает в режиме заглушки
+ */
 class SecurityMonitoringService {
   constructor() {
-    this.redisClient = null;
+    this.memoryStore = new Map();
     this.reconnectAttempts = 0;
-    this.maxReconnectAttempts = 5;
-    this.reconnectDelay = 5000; // 5 секунд
+    this.maxReconnectAttempts = MAX_REDIS_RECONNECT_ATTEMPTS;
+    this.reconnectDelay = REDIS_RECONNECT_DELAY;
     this.suspiciousActivities = new Map();
     this.ipBlocklist = new Set();
     this.userBlocklist = new Set();
-    this.initRedis();
   }
 
   async initRedis() {
@@ -49,7 +54,7 @@ class SecurityMonitoringService {
   }
 
   // Генерация ключа для Redis
-  getKey(type, identifier) {
+  generateKey(type, identifier) {
     return `security:${type}:${identifier}`;
   }
 
@@ -71,107 +76,72 @@ class SecurityMonitoringService {
     }
   }
 
-  // Отслеживание попыток CSRF атак
+  /**
+   * Отслеживание попыток CSRF атак
+   * @param {string} ip - IP адрес
+   * @param {string} path - Путь запроса
+   * @returns {Promise<boolean>} Заблокирован ли IP
+   */
   async trackCSRFAttempt(ip, path) {
-    const key = this.getKey('csrf', ip);
-    try {
-      const attempts = await this.redisClient.incr(key);
-      await this.redisClient.expire(key, 3600); // TTL 1 час
-
-      if (attempts >= LIMITS.CSRF_MAX_ATTEMPTS) {
-        await this.logSecurityEvent('CSRF_ATTACK_SUSPECTED', {
-          ip,
-          path,
-          attempts,
-          status: 'ALERT'
-        });
-        return true; // Требуется блокировка
-      }
-
-      if (attempts >= LIMITS.CSRF_WARNING_THRESHOLD) {
-        await this.logSecurityEvent('CSRF_ATTEMPTS_WARNING', {
-          ip,
-          path,
-          attempts,
-          status: 'WARNING'
-        });
-      }
-
-      return false;
-    } catch (error) {
-      _error('Failed to track CSRF attempt:', error);
-      return false;
-    }
+    return false; // Временно отключено
   }
 
-  // Отслеживание подозрительных IP
-  async trackSuspiciousIP(ip, reason) {
-    const key = this.getKey('suspicious_ip', ip);
-    try {
-      const data = await this.redisClient.get(key);
-      const suspiciousActivity = data ? JSON.parse(data) : { count: 0, reasons: [] };
-      
-      suspiciousActivity.count++;
-      if (!suspiciousActivity.reasons.includes(reason)) {
-        suspiciousActivity.reasons.push(reason);
-      }
-
-      await this.redisClient.set(key, JSON.stringify(suspiciousActivity));
-      await this.redisClient.expire(key, 86400); // TTL 24 часа
-
-      if (suspiciousActivity.count >= LIMITS.SUSPICIOUS_IP_THRESHOLD) {
-        await this.logSecurityEvent('SUSPICIOUS_IP_DETECTED', {
-          ip,
-          activity: suspiciousActivity,
-          status: 'ALERT'
-        });
-        return true; // IP требует особого внимания
-      }
-
-      return false;
-    } catch (error) {
-      _error('Failed to track suspicious IP:', error);
-      return false;
-    }
+  /**
+   * Отслеживание подозрительных IP
+   * @param {string} ip - IP адрес
+   * @param {Array<string>} patterns - Подозрительные паттерны
+   * @returns {Promise<boolean>} Найдены ли подозрительные паттерны
+   */
+  async trackSuspiciousIP(ip, patterns) {
+    return false; // Временно отключено
   }
 
-  // Мониторинг аномального поведения пользователя
-  async trackUserBehavior(userId, action, data = {}) {
-    const key = this.getKey('user_behavior', userId);
-    try {
-      const userActivity = await this.redisClient.get(key);
-      const activities = userActivity ? JSON.parse(userActivity) : [];
-      
-      activities.push({
-        timestamp: Date.now(),
-        action,
-        ...data
-      });
+  /**
+   * Отслеживание попыток брутфорса
+   * @param {string} ip - IP адрес
+   * @param {string} username - Имя пользователя
+   * @returns {Promise<boolean>} Заблокирован ли IP
+   */
+  async trackBruteforce(ip, username) {
+    return false; // Временно отключено
+  }
 
-      // Оставляем только последние 100 действий
-      if (activities.length > 100) {
-        activities.shift();
-      }
+  /**
+   * Отслеживание подозрительных запросов
+   * @param {string} ip - IP адрес
+   * @param {string} method - HTTP метод
+   * @param {string} path - Путь запроса
+   * @param {Object} headers - Заголовки запроса
+   * @returns {Promise<boolean>} Найдены ли подозрительные паттерны
+   */
+  async trackSuspiciousRequest(ip, method, path, headers) {
+    return false; // Временно отключено
+  }
 
-      await this.redisClient.set(key, JSON.stringify(activities));
-      await this.redisClient.expire(key, 86400); // TTL 24 часа
+  /**
+   * Получение статистики безопасности
+   * @returns {Promise<Object>} Статистика безопасности
+   */
+  async getSecurityStats() {
+    return {
+      blockedIPs: [],
+      suspiciousIPs: [],
+      bruteforceAttempts: 0,
+      csrfAttempts: 0,
+      suspiciousRequests: 0,
+      activeMonitoring: false
+    };
+  }
 
-      // Анализ аномалий
-      const anomalies = this.detectAnomalies(activities);
-      if (anomalies.length > 0) {
-        await this.logSecurityEvent('USER_BEHAVIOR_ANOMALY', {
-          userId,
-          anomalies,
-          status: 'WARNING'
-        });
-        return anomalies;
-      }
-
-      return [];
-    } catch (error) {
-      _error('Failed to track user behavior:', error);
-      return [];
-    }
+  /**
+   * Отслеживание поведения пользователя
+   * @param {string} userId - ID пользователя
+   * @param {string} action - Действие
+   * @param {object} metadata - Метаданные
+   * @returns {Promise<Array>} Список аномалий
+   */
+  async trackUserBehavior(userId, action, metadata = {}) {
+    return []; // Временно отключено
   }
 
   // Расширенный анализ аномалий
@@ -254,15 +224,11 @@ class SecurityMonitoringService {
     return anomalies;
   }
 
-  // Очистка данных мониторинга
-  async clearMonitoringData(type, identifier) {
-    const key = this.getKey(type, identifier);
-    try {
-      await this.redisClient.del(key);
-      _info(`Cleared monitoring data for ${type}:${identifier}`);
-    } catch (error) {
-      _error('Failed to clear monitoring data:', error);
-    }
+  /**
+   * Очистка данных мониторинга
+   */
+  async clearMonitoringData() {
+    this.memoryStore.clear();
   }
 
   // Экспорт данных мониторинга
@@ -417,6 +383,21 @@ class SecurityMonitoringService {
   blockUser(userId, reason) {
     this.userBlocklist.add(userId);
     this.logSecurityWarning('user_blocked', { userId, reason });
+  }
+
+  async monitorLoginAttempts(ip) {
+    // Временно отключаем мониторинг
+    return false;
+  }
+
+  async recordSuspiciousActivity(ip, type, details) {
+    // Временно отключаем запись
+    return;
+  }
+
+  async getSuspiciousActivity(ip) {
+    // Временно возвращаем пустой объект
+    return {};
   }
 }
 

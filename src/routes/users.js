@@ -1,6 +1,7 @@
 "use strict";
 
 const { info: _info, error: _error, warn: _warn, debug: _debug } = require("../utils/logger");
+const { HTTP_STATUS_CODES, LIMITS } = require("../constants");
 
 const express = require("express");
 const { User, WorkLog } = require("../models");
@@ -71,7 +72,7 @@ router.get("/",
       });
     } catch (error) {
       _error("Ошибка получения пользователей:", error);
-      res.status(LIMITS.DEFAULT_PAGE_SIZE0).json({
+      res.status(HTTP_STATUS_CODES.INTERNAL_SERVER_ERROR).json({
         success: false,
         message: "Ошибка получения данных пользователей",
       });
@@ -112,7 +113,7 @@ router.get("/:id",
       });
     } catch (error) {
       _error("Ошибка получения пользователя:", error);
-      res.status(LIMITS.DEFAULT_PAGE_SIZE0).json({
+      res.status(HTTP_STATUS_CODES.INTERNAL_SERVER_ERROR).json({
         success: false,
         message: "Ошибка получения данных пользователя",
       });
@@ -153,7 +154,7 @@ router.put("/:id",
       });
     } catch (error) {
       _error("Ошибка обновления пользователя:", error);
-      res.status(LIMITS.DEFAULT_PAGE_SIZE0).json({
+      res.status(HTTP_STATUS_CODES.INTERNAL_SERVER_ERROR).json({
         success: false,
         message: "Ошибка обновления пользователя",
       });

@@ -3,19 +3,8 @@
 const express = require("express");
 const router = express.Router();
 const { info: _info, error: _error, warn: _warn, debug: _debug } = require("../utils/logger");
-
-const HTTP_STATUS_CODES = {
-  BAD_REQUEST: 400,
-  UNAUTHORIZED: 401,
-  FORBIDDEN: 403,
-  NOT_FOUND: 404,
-  INTERNAL_SERVER_ERROR: 500,
-};
-const LIMITS = {
-  DEFAULT_PAGE_SIZE: 20,
-  MAX_PAGE_SIZE: 100,
-  MAX_PAGE_SIZE0: 1000,
-};
+const { HTTP_STATUS_CODES, LIMITS } = require("../constants");
+const axios = require("axios");
 const {
   sendTestMessage,
   sendTelegramMessage,
@@ -44,14 +33,14 @@ router.post("/test", async (req, res) => {
         data: result,
       });
     } else {
-      res.status(LIMITS.DEFAULT_PAGE_SIZE0).json({
+      res.status(HTTP_STATUS_CODES.INTERNAL_SERVER_ERROR).json({
         success: false,
         message: "Ошибка отправки сообщения",
       });
     }
   } catch (error) {
     _error("Ошибка тестирования Telegram:", error);
-    res.status(LIMITS.DEFAULT_PAGE_SIZE0).json({
+    res.status(HTTP_STATUS_CODES.INTERNAL_SERVER_ERROR).json({
       success: false,
       message: "Внутренняя ошибка сервера",
     });
@@ -81,14 +70,14 @@ router.post("/send", async (req, res) => {
         data: result,
       });
     } else {
-      res.status(LIMITS.DEFAULT_PAGE_SIZE0).json({
+      res.status(HTTP_STATUS_CODES.INTERNAL_SERVER_ERROR).json({
         success: false,
         message: "Ошибка отправки сообщения",
       });
     }
   } catch (error) {
     _error("Ошибка отправки Telegram сообщения:", error);
-    res.status(LIMITS.DEFAULT_PAGE_SIZE0).json({
+    res.status(HTTP_STATUS_CODES.INTERNAL_SERVER_ERROR).json({
       success: false,
       message: "Внутренняя ошибка сервера",
     });
@@ -109,23 +98,22 @@ router.get("/bot-info", async (req, res) => {
       });
     }
 
-    const _axios = require("axios");
     const response = await axios.get(
-      `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getMe`,
+      `/api/telegram/me`
     );
 
     res.json({
       success: true,
       data: response.data,
       instructions: {
-        getUpdates: `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getUpdates`,
+        getUpdates: `/api/telegram/updates`,
         testEndpoint: "/api/telegram/test",
         note: "Для получения chat_id напишите боту /start и посмотрите getUpdates",
       },
     });
   } catch (error) {
     _error("Ошибка получения информации о боте:", error);
-    res.status(LIMITS.DEFAULT_PAGE_SIZE0).json({
+    res.status(HTTP_STATUS_CODES.INTERNAL_SERVER_ERROR).json({
       success: false,
       message: "Ошибка подключения к Telegram API",
     });

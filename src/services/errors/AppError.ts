@@ -1,37 +1,33 @@
 export class AppError extends Error {
-  constructor(
-    public statusCode: number,
-    message: string,
-    public code: string,
-    public isOperational = true,
-    public details?: Record<string, unknown>
-  ) {
+  public readonly statusCode: number;
+  public readonly isOperational: boolean;
+  public readonly details?: any;
+
+  constructor(message: string, statusCode: number, isOperational: boolean = true, details?: any) {
     super(message);
-    Object.setPrototypeOf(this, AppError.prototype);
+    this.statusCode = statusCode;
+    this.isOperational = isOperational;
+    this.details = details;
     Error.captureStackTrace(this, this.constructor);
   }
-}
 
-export class ValidationError extends AppError {
-  constructor(message: string, details?: Record<string, unknown>) {
-    super(400, message, 'VALIDATION_ERROR', true, details);
+  static ValidationError(message: string, details?: any) {
+    return new AppError(message, 400, true, details);
   }
-}
 
-export class AuthenticationError extends AppError {
-  constructor(message: string = 'Authentication failed') {
-    super(401, message, 'AUTHENTICATION_ERROR', true);
+  static AuthenticationError(message: string) {
+    return new AppError(message, 401, true);
   }
-}
 
-export class AuthorizationError extends AppError {
-  constructor(message: string = 'Not authorized') {
-    super(403, message, 'AUTHORIZATION_ERROR', true);
+  static AuthorizationError(message: string) {
+    return new AppError(message, 403, true);
   }
-}
 
-export class NotFoundError extends AppError {
-  constructor(resource: string) {
-    super(404, `${resource} not found`, 'NOT_FOUND_ERROR', true);
+  static NotFoundError(resource: string) {
+    return new AppError(`${resource} not found`, 404, true);
+  }
+
+  static ConflictError(message: string) {
+    return new AppError(message, 409, true);
   }
 } 

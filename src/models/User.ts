@@ -1,79 +1,56 @@
-import { Model, DataTypes, Optional } from 'sequelize';
+import { Model, DataTypes } from 'sequelize';
 import { sequelize } from '../config/database';
-import bcrypt from 'bcrypt';
 
-export interface UserAttributes {
-  id: number;
-  email: string;
-  password: string;
-  name: string;
-  telegramId?: string;
-  settings?: Record<string, any>;
-  status: 'active' | 'inactive';
-  createdAt?: Date;
-  updatedAt?: Date;
-}
+export type UserRole = 'admin' | 'user';
 
-export interface UserCreationAttributes extends Optional<UserAttributes, 'id' | 'settings' | 'status'> {}
-
-export class User extends Model<UserAttributes, UserCreationAttributes> implements UserAttributes {
-  public id!: number;
+class User extends Model {
+  public id!: string;
+  public name!: string;
   public email!: string;
   public password!: string;
-  public name!: string;
-  public telegramId!: string;
-  public settings!: Record<string, any>;
-  public status!: 'active' | 'inactive';
-
+  public role!: UserRole;
+  public company_id!: string;
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
-
-  public async comparePassword(candidatePassword: string): Promise<boolean> {
-    return bcrypt.compare(candidatePassword, this.password);
-  }
 }
 
 User.init(
   {
     id: {
-      type: DataTypes.INTEGER,
-      autoIncrement: true,
-      primaryKey: true
+      type: DataTypes.UUID,
+      defaultValue: DataTypes.UUIDV4,
+      primaryKey: true,
+    },
+    name: {
+      type: DataTypes.STRING,
+      allowNull: false,
     },
     email: {
       type: DataTypes.STRING,
       allowNull: false,
       unique: true,
       validate: {
-        isEmail: true
-      }
+        isEmail: true,
+      },
     },
     password: {
       type: DataTypes.STRING,
-      allowNull: false
+      allowNull: false,
     },
-    name: {
-      type: DataTypes.STRING,
-      allowNull: false
+    role: {
+      type: DataTypes.ENUM('admin', 'user'),
+      allowNull: false,
+      defaultValue: 'user',
     },
-    telegramId: {
-      type: DataTypes.STRING,
+    company_id: {
+      type: DataTypes.UUID,
       allowNull: true,
-      unique: true
     },
-    settings: {
-      type: DataTypes.JSON,
-      allowNull: true
-    },
-    status: {
-      type: DataTypes.ENUM('active', 'inactive'),
-      defaultValue: 'active'
-    }
   },
   {
     sequelize,
+    modelName: 'User',
     tableName: 'users',
-    modelName: 'User'
   }
 );
 

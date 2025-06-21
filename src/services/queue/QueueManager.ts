@@ -1,90 +1,99 @@
-import Queue from 'bull';
-import { Redis } from 'ioredis';
-import { logger } from '../../config/logging';
+import { EventEmitter } from 'events';
+import logger from '../../config/logging';
 
-export interface QueueConfig {
-  redis: Redis;
-  name: string;
-  options?: Queue.QueueOptions;
+interface QueueOptions {
+  maxRetries?: number;
+  retryDelay?: number;
 }
 
-export class QueueManager {
-  private queues: Map<string, Queue.Queue> = new Map();
+interface QueueItem {
+  id: string;
+  data: any;
+  retries: number;
+}
 
-  createQueue(config: QueueConfig): Queue.Queue {
-    const { name, redis, options } = config;
+class QueueManager extends EventEmitter {
+  private static instance: QueueManager;
+  private queues: Map<string, QueueItem[]>;
+  private processing: Map<string, boolean>;
+  private options: Map<string, QueueOptions>;
 
-    if (this.queues.has(name)) {
-      return this.queues.get(name)!;
-    }
-
-    const queue = new Queue(name, {
-      redis: {
-        port: redis.options.port,
-        host: redis.options.host,
-        password: redis.options.password,
-      },
-      ...options,
-    });
-
-    // Handle queue events
-    queue.on('error', (error) => {
-      logger.error(`Queue ${name} error:`, error);
-    });
-
-    queue.on('failed', (job, error) => {
-      logger.error(`Job ${job.id} in queue ${name} failed:`, error);
-    });
-
-    queue.on('completed', (job) => {
-      logger.info(`Job ${job.id} in queue ${name} completed`);
-    });
-
-    this.queues.set(name, queue);
-    return queue;
+  private constructor() {
+    super();
+    this.queues = new Map();
+    this.processing = new Map();
+    this.options = new Map();
   }
 
-  async addJob<T = any>(
-    queueName: string,
-    data: T,
-    options?: Queue.JobOptions
-  ): Promise<Queue.Job<T>> {
-    const queue = this.queues.get(queueName);
-    if (!queue) {
-      throw new Error(`Queue ${queueName} not found`);
+  public static getInstance(): QueueManager {
+    if (!QueueManager.instance) {
+      QueueManager.instance = new QueueManager();
     }
-
-    return queue.add(data, options);
+    return QueueManager.instance;
   }
 
-  async processQueue<T = any, R = any>(
-    queueName: string,
-    processor: (job: Queue.Job<T>) => Promise<R>
-  ): Promise<void> {
-    const queue = this.queues.get(queueName);
-    if (!queue) {
-      throw new Error(`Queue ${queueName} not found`);
+  public createQueue(name: string, options: QueueOptions = {}): void {
+    if (!this.queues.has(name)) {
+      this.queues.set(name, []);
+      this.processing.set(name, false);
+      this.options.set(name, {
+        maxRetries: options.maxRetries || 3,
+        retryDelay: options.retryDelay || 1000
+      });
+    }
+  }
+
+  public async addToQueue(queueName: string, data: any): Promise<string> {
+    if (!this.queues.has(queueName)) {
+      this.createQueue(queueName);
     }
 
-    queue.process(async (job) => {
+    const id = Math.random().toString(36).substr(2, 9);
+    const item: QueueItem = { id, data, retries: 0 };
+    
+    const queue = this.queues.get(queueName)!;
+    queue.push(item);
+
+    this.processQueue(queueName);
+    return id;
+  }
+
+  private async processQueue(queueName: string): Promise<void> {
+    if (this.processing.get(queueName)) {
+      return;
+    }
+
+    this.processing.set(queueName, true);
+    const queue = this.queues.get(queueName)!;
+    const options = this.options.get(queueName)!;
+
+    while (queue.length > 0) {
+      const item = queue[0];
       try {
-        return await processor(job);
+        await this.emit(queueName, item.data);
+        queue.shift(); // Remove processed item
       } catch (error) {
-        logger.error(`Error processing job ${job.id} in queue ${queueName}:`, error);
-        throw error;
+        logger.error(`Error processing queue item: ${error}`);
+        if (item.retries < options.maxRetries!) {
+          item.retries++;
+          await new Promise(resolve => setTimeout(resolve, options.retryDelay!));
+        } else {
+          queue.shift(); // Remove failed item
+          this.emit('error', { queue: queueName, item, error });
+        }
       }
-    });
+    }
+
+    this.processing.set(queueName, false);
   }
 
-  async getQueue(name: string): Promise<Queue.Queue | undefined> {
-    return this.queues.get(name);
+  public getQueueLength(queueName: string): number {
+    return this.queues.get(queueName)?.length || 0;
   }
 
-  async closeAll(): Promise<void> {
-    const closePromises = Array.from(this.queues.values()).map((queue) =>
-      queue.close()
-    );
-    await Promise.all(closePromises);
-    this.queues.clear();
+  public clearQueue(queueName: string): void {
+    this.queues.set(queueName, []);
   }
-} 
+}
+
+export default QueueManager.getInstance(); 

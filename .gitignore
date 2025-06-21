@@ -48,3 +48,4 @@ coverage/
 database.sqlite
 *.db
 *.sqlite
+node_modules

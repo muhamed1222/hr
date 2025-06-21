@@ -1,0 +1,84 @@
+// HTTP Status Codes
+export const HTTP_STATUS_CODES = {
+  OK: 200,
+  OK0: 2000,
+  BAD_REQUEST: 400,
+  UNAUTHORIZED: 401,
+  FORBIDDEN: 403,
+  NOT_FOUND: 404,
+  INTERNAL_SERVER_ERROR: 500,
+} as const;
+
+export type HttpStatusCode = typeof HTTP_STATUS_CODES[keyof typeof HTTP_STATUS_CODES];
+
+// Limits
+export const LIMITS = {
+  DEFAULT_PAGE_SIZE: 20,
+  MAX_PAGE_SIZE: 100,
+  MAX_PAGE_SIZE0: 1000,
+  MAX_TEAM_MEMBERS: 50,
+  MAX_TEAM_MEMBERS0: 500,
+  CSRF_MAX_ATTEMPTS: 10,
+  CSRF_WARNING_THRESHOLD: 5,
+  SUSPICIOUS_IP_THRESHOLD: 20,
+  USER_ACTIONS_PER_5_MIN: 100,
+  REPEATED_ACTION_THRESHOLD: 30,
+  MAX_LOGIN_ATTEMPTS: 5,
+  LOGIN_BLOCK_DURATION: 15 * 60, // 15 minutes in seconds
+  IP_BLOCK_DURATION: 24 * 60 * 60, // 24 hours in seconds
+  MAX_COUNTRIES_PER_HOUR: 3,
+  MAX_IPS_PER_HOUR: 5,
+  MAX_UNUSUAL_TIME_ACTIONS: 10,
+  MAX_PAYLOAD_SIZE: 10 * 1024 * 1024, // 10MB
+  MAX_REDIS_RECONNECT_ATTEMPTS: 5,
+  REDIS_RECONNECT_DELAY: 5000, // 5 seconds
+} as const;
+
+export type Limit = typeof LIMITS[keyof typeof LIMITS];
+
+// Time Constants
+export const TIME_CONSTANTS = {
+  MINUTE: 60 * 1000,
+  HOUR: 60 * 60 * 1000,
+  DAY: 24 * 60 * 60 * 1000,
+  WEEK: 7 * 24 * 60 * 60 * 1000,
+  MONTH: 30 * 24 * 60 * 60 * 1000,
+} as const;
+
+export type TimeConstant = typeof TIME_CONSTANTS[keyof typeof TIME_CONSTANTS];
+
+// Security Severity Levels
+export const SECURITY_SEVERITY = {
+  LOW: 'LOW',
+  MEDIUM: 'MEDIUM',
+  HIGH: 'HIGH',
+  CRITICAL: 'CRITICAL'
+} as const;
+
+export type SecuritySeverity = typeof SECURITY_SEVERITY[keyof typeof SECURITY_SEVERITY];
+
+// Security Event Types
+export const SECURITY_EVENT_TYPES = {
+  CSRF_VIOLATION: 'CSRF_VIOLATION',
+  SQL_INJECTION_ATTEMPT: 'SQL_INJECTION_ATTEMPT',
+  XSS_ATTEMPT: 'XSS_ATTEMPT',
+  SUSPICIOUS_IP: 'SUSPICIOUS_IP',
+  GEOGRAPHIC_ANOMALY: 'GEOGRAPHIC_ANOMALY',
+  UNUSUAL_TIME_PATTERN: 'UNUSUAL_TIME_PATTERN',
+  HIGH_FREQUENCY_ACTIONS: 'HIGH_FREQUENCY_ACTIONS',
+  REPEATED_ACTIONS: 'REPEATED_ACTIONS',
+  LARGE_PAYLOAD: 'LARGE_PAYLOAD',
+  SUSPICIOUS_HEADERS: 'SUSPICIOUS_HEADERS'
+} as const;
+
+export type SecurityEventType = typeof SECURITY_EVENT_TYPES[keyof typeof SECURITY_EVENT_TYPES];
+
+// Monitoring Intervals
+export const MONITORING_INTERVALS = {
+  REAL_TIME: '1m',
+  SHORT_TERM: '5m',
+  MEDIUM_TERM: '1h',
+  LONG_TERM: '24h'
+} as const;
+
+export type MonitoringInterval = typeof MONITORING_INTERVALS[keyof typeof MONITORING_INTERVALS]; 

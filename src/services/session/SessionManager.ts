@@ -1,93 +1,87 @@
-import { Redis } from 'ioredis';
-import { v4 as uuidv4 } from 'uuid';
+import logger from '../../config/logging';
 
-export interface Session {
-  id: string;
+interface SessionData {
   userId: string;
-  createdAt: number;
   expiresAt: number;
-  data?: Record<string, any>;
+  [key: string]: any;
 }
 
-export class SessionManager {
-  private readonly redis: Redis;
+class SessionManager {
+  private static instance: SessionManager;
+  private sessions: Map<string, SessionData>;
   private readonly prefix: string = 'session:';
-  private readonly defaultTTL: number = 24 * 60 * 60; // 24 hours in seconds
+  private readonly defaultTTL: number = 24 * 60 * 60; // 24 hours
 
-  constructor(redisClient: Redis) {
-    this.redis = redisClient;
+  private constructor() {
+    this.sessions = new Map();
+  }
+
+  public static getInstance(): SessionManager {
+    if (!SessionManager.instance) {
+      SessionManager.instance = new SessionManager();
+    }
+    return SessionManager.instance;
   }
 
   private getKey(sessionId: string): string {
     return `${this.prefix}${sessionId}`;
   }
 
-  async create(userId: string, ttl: number = this.defaultTTL): Promise<Session> {
-    const now = Math.floor(Date.now() / 1000);
-    const session: Session = {
-      id: uuidv4(),
-      userId,
-      createdAt: now,
-      expiresAt: now + ttl,
-    };
+  public async createSession(sessionId: string, data: SessionData, ttl: number = this.defaultTTL): Promise<void> {
+    const expiresAt = Date.now() + ttl * 1000;
+    this.sessions.set(this.getKey(sessionId), { ...data, expiresAt });
 
-    await this.redis.set(
-      this.getKey(session.id),
-      JSON.stringify(session),
-      'EX',
-      ttl
-    );
-
-    return session;
+    // Установка таймера для автоматического удаления
+    setTimeout(() => {
+      this.sessions.delete(this.getKey(sessionId));
+    }, ttl * 1000);
   }
 
-  async get(sessionId: string): Promise<Session | null> {
-    const data = await this.redis.get(this.getKey(sessionId));
-    if (!data) return null;
+  public async getSession(sessionId: string): Promise<SessionData | null> {
+    const key = this.getKey(sessionId);
+    const session = this.sessions.get(key);
 
-    const session = JSON.parse(data) as Session;
-    const now = Math.floor(Date.now() / 1000);
+    if (!session) {
+      return null;
+    }
 
-    if (session.expiresAt < now) {
-      await this.delete(sessionId);
+    if (session.expiresAt < Date.now()) {
+      this.sessions.delete(key);
       return null;
     }
 
     return session;
   }
 
-  async update(sessionId: string, data: Partial<Session>): Promise<Session | null> {
-    const session = await this.get(sessionId);
-    if (!session) return null;
+  public async updateSession(sessionId: string, data: Partial<SessionData>): Promise<void> {
+    const key = this.getKey(sessionId);
+    const existingSession = this.sessions.get(key);
 
-    const updatedSession = { ...session, ...data };
-    const ttl = Math.max(0, updatedSession.expiresAt - Math.floor(Date.now() / 1000));
+    if (!existingSession) {
+      throw new Error('Session not found');
+    }
 
-    await this.redis.set(
-      this.getKey(sessionId),
-      JSON.stringify(updatedSession),
-      'EX',
-      ttl
-    );
-
-    return updatedSession;
+    this.sessions.set(key, { ...existingSession, ...data });
   }
 
-  async delete(sessionId: string): Promise<boolean> {
-    const result = await this.redis.del(this.getKey(sessionId));
-    return result === 1;
+  public async deleteSession(sessionId: string): Promise<boolean> {
+    return this.sessions.delete(this.getKey(sessionId));
   }
 
-  async deleteAllUserSessions(userId: string): Promise<void> {
-    const keys = await this.redis.keys(`${this.prefix}*`);
-    for (const key of keys) {
-      const data = await this.redis.get(key);
-      if (data) {
-        const session = JSON.parse(data) as Session;
-        if (session.userId === userId) {
-          await this.redis.del(key);
-        }
+  public async getAllSessions(): Promise<SessionData[]> {
+    const now = Date.now();
+    const activeSessions: SessionData[] = [];
+
+    for (const [key, session] of this.sessions.entries()) {
+      if (session.expiresAt > now) {
+        activeSessions.push(session);
+      } else {
+        this.sessions.delete(key);
       }
     }
+
+    return activeSessions;
   }
-} 
+}
+
+export default SessionManager.getInstance(); 
