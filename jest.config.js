@@ -1,15 +1,19 @@
 module.exports = {
+  preset: 'ts-jest',
   testEnvironment: 'node',
-  setupFilesAfterEnv: ['<rootDir>/tests/setup.js'],
+  setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],
   testMatch: [
-    '<rootDir>/tests/**/*.test.js',
-    '<rootDir>/tests/**/*.spec.js'
+    '<rootDir>/tests/**/*.test.ts',
+    '<rootDir>/tests/**/*.spec.ts'
   ],
+  moduleNameMapper: {
+    '^@/(.*)$': '<rootDir>/src/$1'
+  },
   collectCoverageFrom: [
-    'src/**/*.js',
+    'src/**/*.ts',
     '!src/migrations/**',
-    '!src/database/seed.js',
-    '!src/app.js' // исключаем основной файл приложения
+    '!src/database/seed.ts',
+    '!src/app.ts'
   ],
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'lcov', 'html'],
@@ -24,5 +28,5 @@ module.exports = {
   testTimeout: 10000,
   verbose: true,
   // Мокируем переменные окружения для тестов
-  setupFiles: ['<rootDir>/tests/env.setup.js']
+  setupFiles: ['<rootDir>/tests/env.setup.ts']
 }; 

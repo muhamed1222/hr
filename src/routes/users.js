@@ -5,147 +5,161 @@ const { info: _info, error: _error, warn: _warn, debug: _debug } = require("../u
 const express = require("express");
 const { User, WorkLog } = require("../models");
 const { Op } = require("sequelize");
+const CacheService = require('../services/CacheService');
 
 const router = express.Router();
 
+// Кэшируем GET запросы на 15 минут
+const USERS_CACHE_TTL = 900;
+
 // Получить всех пользователей
-router.get("/", async (req, res) => {
-  try {
-    const {
-      role,
-      status,
-      search,
-      page = 1,
-      limit = LIMITS.DEFAULT_PAGE_SIZE,
-    } = req.query;
-    const offset = (page - 1) * limit;
+router.get("/", 
+  CacheService.cacheMiddleware('users-list', USERS_CACHE_TTL),
+  async (req, res) => {
+    try {
+      const {
+        role,
+        status,
+        search,
+        page = 1,
+        limit = LIMITS.DEFAULT_PAGE_SIZE,
+      } = req.query;
+      const offset = (page - 1) * limit;
 
-    const whereClause = {};
+      const whereClause = {};
 
-    if (role) {
-      whereClause.role = role;
-    }
+      if (role) {
+        whereClause.role = role;
+      }
 
-    if (status) {
-      whereClause.status = status;
-    }
+      if (status) {
+        whereClause.status = status;
+      }
 
-    if (search) {
-      whereClause[Op.or] = [
-        { name: { [Op.iLike]: `%${search}%` } },
-        { username: { [Op.iLike]: `%${search}%` } },
-      ];
-    }
+      if (search) {
+        whereClause[Op.or] = [
+          { name: { [Op.iLike]: `%${search}%` } },
+          { username: { [Op.iLike]: `%${search}%` } },
+        ];
+      }
 
-    const { rows: users, count } = await User.findAndCountAll({
-      where: whereClause,
-      attributes: [
-        "id",
-        "telegramId",
-        "name",
-        "username",
-        "role",
-        "status",
-        "createdAt",
-      ],
-      order: [["name", "ASC"]],
-      limit: parseInt(limit),
-      offset: offset,
-    });
-
-    res.json({
-      success: true,
-      data: users,
-      pagination: {
-        page: parseInt(page),
+      const { rows: users, count } = await User.findAndCountAll({
+        where: whereClause,
+        attributes: [
+          "id",
+          "telegramId",
+          "name",
+          "username",
+          "role",
+          "status",
+          "createdAt",
+        ],
+        order: [["name", "ASC"]],
         limit: parseInt(limit),
-        total: count,
-        pages: Math.ceil(count / limit),
-      },
-    });
-  } catch (error) {
-    _error("Ошибка получения пользователей:", error);
-    res.status(LIMITS.DEFAULT_PAGE_SIZE0).json({
-      success: false,
-      message: "Ошибка получения данных пользователей",
-    });
+        offset: offset,
+      });
+
+      res.json({
+        success: true,
+        data: users,
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total: count,
+          pages: Math.ceil(count / limit),
+        },
+      });
+    } catch (error) {
+      _error("Ошибка получения пользователей:", error);
+      res.status(LIMITS.DEFAULT_PAGE_SIZE0).json({
+        success: false,
+        message: "Ошибка получения данных пользователей",
+      });
+    }
   }
-});
+);
 
 // Получить конкретного пользователя
-router.get("/:id", async (req, res) => {
-  try {
-    const { id } = req.params;
+router.get("/:id", 
+  CacheService.cacheMiddleware('user-profile', USERS_CACHE_TTL),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
 
-    const user = await User.findByPk(id, {
-      attributes: [
-        "id",
-        "telegramId",
-        "name",
-        "username",
-        "role",
-        "status",
-        "createdAt",
-        "updatedAt",
-      ],
-    });
+      const user = await User.findByPk(id, {
+        attributes: [
+          "id",
+          "telegramId",
+          "name",
+          "username",
+          "role",
+          "status",
+          "createdAt",
+          "updatedAt",
+        ],
+      });
 
-    if (!user) {
-      return res.status(HTTP_STATUS_CODES.NOT_FOUND).json({
+      if (!user) {
+        return res.status(HTTP_STATUS_CODES.NOT_FOUND).json({
+          success: false,
+          message: "Пользователь не найден",
+        });
+      }
+
+      res.json({
+        success: true,
+        data: user,
+      });
+    } catch (error) {
+      _error("Ошибка получения пользователя:", error);
+      res.status(LIMITS.DEFAULT_PAGE_SIZE0).json({
         success: false,
-        message: "Пользователь не найден",
+        message: "Ошибка получения данных пользователя",
       });
     }
-
-    res.json({
-      success: true,
-      data: user,
-    });
-  } catch (error) {
-    _error("Ошибка получения пользователя:", error);
-    res.status(LIMITS.DEFAULT_PAGE_SIZE0).json({
-      success: false,
-      message: "Ошибка получения данных пользователя",
-    });
   }
-});
+);
 
 // Обновить пользователя
-router.put("/:id", async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { name, username, role, status } = req.body;
+router.put("/:id", 
+  CacheService.invalidateCache('users-list'),
+  CacheService.invalidateCache('user-profile'),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { name, username, role, status } = req.body;
 
-    const user = await User.findByPk(id);
+      const user = await User.findByPk(id);
 
-    if (!user) {
-      return res.status(HTTP_STATUS_CODES.NOT_FOUND).json({
+      if (!user) {
+        return res.status(HTTP_STATUS_CODES.NOT_FOUND).json({
+          success: false,
+          message: "Пользователь не найден",
+        });
+      }
+
+      const updates = {};
+      if (name !== undefined) updates.name = name;
+      if (username !== undefined) updates.username = username;
+      if (role !== undefined) updates.role = role;
+      if (status !== undefined) updates.status = status;
+
+      await user.update(updates);
+
+      res.json({
+        success: true,
+        data: user,
+        message: "Пользователь обновлён",
+      });
+    } catch (error) {
+      _error("Ошибка обновления пользователя:", error);
+      res.status(LIMITS.DEFAULT_PAGE_SIZE0).json({
         success: false,
-        message: "Пользователь не найден",
+        message: "Ошибка обновления пользователя",
       });
     }
-
-    const updates = {};
-    if (name !== undefined) updates.name = name;
-    if (username !== undefined) updates.username = username;
-    if (role !== undefined) updates.role = role;
-    if (status !== undefined) updates.status = status;
-
-    await user.update(updates);
-
-    res.json({
-      success: true,
-      data: user,
-      message: "Пользователь обновлён",
-    });
-  } catch (error) {
-    _error("Ошибка обновления пользователя:", error);
-    res.status(LIMITS.DEFAULT_PAGE_SIZE0).json({
-      success: false,
-      message: "Ошибка обновления пользователя",
-    });
   }
-});
+);
 
 // Получить статистику пользователя
 router.get("/:id/stats", async (req, res) => {
@@ -228,34 +242,38 @@ router.get("/:id/stats", async (req, res) => {
 });
 
 // Удалить пользователя (деактивировать)
-router.delete("/:id", async (req, res) => {
-  try {
-    const { id } = req.params;
+router.delete("/:id", 
+  CacheService.invalidateCache('users-list'),
+  CacheService.invalidateCache('user-profile'),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
 
-    const user = await User.findByPk(id);
+      const user = await User.findByPk(id);
 
-    if (!user) {
-      return res.status(HTTP_STATUS_CODES.NOT_FOUND).json({
+      if (!user) {
+        return res.status(HTTP_STATUS_CODES.NOT_FOUND).json({
+          success: false,
+          message: "Пользователь не найден",
+        });
+      }
+
+      // Деактивируем вместо удаления
+      await user.update({ status: "inactive" });
+
+      res.json({
+        success: true,
+        message: "Пользователь деактивирован",
+      });
+    } catch (error) {
+      _error("Ошибка деактивации пользователя:", error);
+      res.status(LIMITS.DEFAULT_PAGE_SIZE0).json({
         success: false,
-        message: "Пользователь не найден",
+        message: "Ошибка деактивации пользователя",
       });
     }
-
-    // Деактивируем вместо удаления
-    await user.update({ status: "inactive" });
-
-    res.json({
-      success: true,
-      message: "Пользователь деактивирован",
-    });
-  } catch (error) {
-    _error("Ошибка деактивации пользователя:", error);
-    res.status(LIMITS.DEFAULT_PAGE_SIZE0).json({
-      success: false,
-      message: "Ошибка деактивации пользователя",
-    });
   }
-});
+);
 
 // Получить рейтинг сотрудников
 router.get("/ranking/reliability", async (req, res) => {

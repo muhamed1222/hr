@@ -6,83 +6,172 @@ const path = require("path");
 const fs = require("fs");
 const { TIME_CONSTANTS } = require("../constants");
 
-// Создание директории для логов
-const logDir = path.join(process.cwd(), "logs");
+// Форматы логов
+const formats = {
+  console: winston.format.combine(
+    winston.format.colorize(),
+    winston.format.timestamp({ format: "YYYY-MM-DD HH:mm:ss" }),
+    winston.format.printf(({ level, message, timestamp, ...meta }) => {
+      const metaStr = Object.keys(meta).length ? JSON.stringify(meta, null, 2) : "";
+      return `${timestamp} ${level}: ${message} ${metaStr}`;
+    })
+  ),
+  
+  file: winston.format.combine(
+    winston.format.timestamp({ format: "YYYY-MM-DD HH:mm:ss" }),
+    winston.format.json()
+  )
+};
 
 // Константы для конфигурации логов
 const LOG_RETENTION_DAYS = 14;
 const LOG_CLEANUP_DAYS = 30;
 const LOG_MAX_SIZE = "20m";
 
-// Конфигурация ротации логов
-const logRotationConfig = {
+// Конфигурация ротации файлов
+const rotateConfig = {
   datePattern: "YYYY-MM-DD",
-  zippedArchive: true,
   maxSize: LOG_MAX_SIZE,
-  maxFiles: `${LOG_RETENTION_DAYS}d`, // Хранить логи за 14 дней
-  format: winston.format.combine(
-    winston.format.timestamp({
-      format: "YYYY-MM-DD HH:mm:ss",
-    }),
-    winston.format.errors({ stack: true }),
-    winston.format.json(),
-  ),
+  maxFiles: `${LOG_RETENTION_DAYS}d`,
+  compress: true
 };
 
-// Создание логгера
-const logger = winston.createLogger({
-  level: process.env.LOG_LEVEL || "info",
-  format: winston.format.combine(
-    winston.format.timestamp({
-      format: "YYYY-MM-DD HH:mm:ss",
-    }),
-    winston.format.errors({ stack: true }),
-    winston.format.json(),
-  ),
-  defaultMeta: { service: "hr-system" },
-  transports: [
-    // Ротация файлов для всех логов
-    new DailyRotateFile({
-      filename: path.join(logDir, "application-%DATE%.log"),
-      ...logRotationConfig,
-    }),
-
-    // Ротация файлов для ошибок
-    new DailyRotateFile({
-      filename: path.join(logDir, "error-%DATE%.log"),
-      level: "error",
-      ...logRotationConfig,
-    }),
-
-    // Ротация файлов для аудита
-    new DailyRotateFile({
-      filename: path.join(logDir, "audit-%DATE%.log"),
-      level: "info",
-      ...logRotationConfig,
-    }),
-  ],
-});
-
-// Добавление консольного вывода в режиме разработки
-if (process.env.NODE_ENV !== "production") {
-  logger.add(
-    new winston.transports.Console({
-      format: winston.format.combine(
-        winston.format.colorize(),
-        winston.format.simple(),
-      ),
-    }),
-  );
+// Создаем директорию для логов если её нет
+const logsDir = path.join(process.cwd(), "logs");
+if (!require("fs").existsSync(logsDir)) {
+  require("fs").mkdirSync(logsDir);
 }
+
+// Транспорты для разных уровней логирования
+const transports = {
+  error: new DailyRotateFile({
+    level: "error",
+    filename: path.join(logsDir, "error-%DATE%.log"),
+    format: formats.file,
+    ...rotateConfig
+  }),
+
+  combined: new DailyRotateFile({
+    filename: path.join(logsDir, "combined-%DATE%.log"),
+    format: formats.file,
+    ...rotateConfig
+  }),
+
+  security: new DailyRotateFile({
+    filename: path.join(logsDir, "security-%DATE%.log"),
+    format: formats.file,
+    ...rotateConfig
+  }),
+
+  console: new winston.transports.Console({
+    level: process.env.NODE_ENV === "production" ? "info" : "debug",
+    format: formats.console
+  })
+};
+
+// Создаем логгеры для разных контекстов
+const loggers = {
+  // Основной логгер
+  default: winston.createLogger({
+    levels: winston.config.npm.levels,
+    transports: [
+      transports.error,
+      transports.combined,
+      transports.console
+    ]
+  }),
+
+  // Логгер для безопасности
+  security: winston.createLogger({
+    levels: winston.config.npm.levels,
+    transports: [
+      transports.security,
+      transports.console
+    ]
+  }),
+
+  // Логгер для API
+  api: winston.createLogger({
+    levels: winston.config.npm.levels,
+    transports: [
+      transports.error,
+      transports.combined,
+      transports.console
+    ]
+  })
+};
+
+// Функции логирования
+const logger = {
+  error: (message, meta = {}) => {
+    loggers.default.error(message, meta);
+  },
+
+  warn: (message, meta = {}) => {
+    loggers.default.warn(message, meta);
+  },
+
+  info: (message, meta = {}) => {
+    loggers.default.info(message, meta);
+  },
+
+  debug: (message, meta = {}) => {
+    loggers.default.debug(message, meta);
+  },
+
+  // Логирование безопасности
+  security: {
+    error: (message, meta = {}) => {
+      loggers.security.error(message, meta);
+    },
+    warn: (message, meta = {}) => {
+      loggers.security.warn(message, meta);
+    },
+    info: (message, meta = {}) => {
+      loggers.security.info(message, meta);
+    },
+    audit: (message, meta = {}) => {
+      loggers.security.info("AUDIT: " + message, meta);
+    }
+  },
+
+  // Логирование API
+  api: {
+    error: (message, meta = {}) => {
+      loggers.api.error(message, meta);
+    },
+    warn: (message, meta = {}) => {
+      loggers.api.warn(message, meta);
+    },
+    info: (message, meta = {}) => {
+      loggers.api.info(message, meta);
+    },
+    request: (req, meta = {}) => {
+      loggers.api.info(`${req.method} ${req.originalUrl}`, {
+        ...meta,
+        ip: req.ip,
+        userId: req.user?.id,
+        userAgent: req.headers["user-agent"]
+      });
+    },
+    response: (req, res, meta = {}) => {
+      loggers.api.info(`${req.method} ${req.originalUrl} - ${res.statusCode}`, {
+        ...meta,
+        responseTime: meta.responseTime,
+        userId: req.user?.id
+      });
+    }
+  }
+};
 
 // Функция для очистки старых логов
 function cleanupOldLogs() {
-  const logFiles = fs.readdirSync(logDir);
+  const logFiles = fs.readdirSync(logsDir);
   const now = new Date();
   const maxAge = LOG_CLEANUP_DAYS * TIME_CONSTANTS.DAY; // 30 дней в миллисекундах
 
   logFiles.forEach((file) => {
-    const filePath = path.join(logDir, file);
+    const filePath = path.join(logsDir, file);
     const stats = fs.statSync(filePath);
     const fileAge = now.getTime() - stats.mtime.getTime();
 
@@ -95,7 +184,7 @@ function cleanupOldLogs() {
 
 // Функция для получения статистики логов
 function getLogStats() {
-  const logFiles = fs.readdirSync(logDir);
+  const logFiles = fs.readdirSync(logsDir);
 
   const stats = {
     totalFiles: logFiles.length,
@@ -104,7 +193,7 @@ function getLogStats() {
   };
 
   logFiles.forEach((file) => {
-    const filePath = path.join(logDir, file);
+    const filePath = path.join(logsDir, file);
     const fileStats = fs.statSync(filePath);
     stats.totalSize += fileStats.size;
 
@@ -124,5 +213,5 @@ module.exports = {
   logger,
   cleanupOldLogs,
   getLogStats,
-  logDir,
+  logsDir,
 };

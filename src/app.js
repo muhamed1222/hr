@@ -1,30 +1,39 @@
 "use strict";
 
-const { info: _info, error: _error, warn: _warn, debug: _debug } = require("./utils/logger");
 const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
 const path = require("path");
+const swaggerUi = require('swagger-ui-express');
+const swaggerSpecs = require('./config/swagger');
+const globalErrorHandler = require('./services/errors/errorHandler');
+const { configureSecurityMiddleware } = require('./config/security');
+const session = require('express-session');
+const cookieParser = require('cookie-parser');
+const { generateToken, verifyToken } = require('./middleware/csrf');
+const { monitorCSRF, monitorSuspiciousActivity } = require('./middleware/securityMonitoring');
+const apiLogger = require('./middleware/apiLogger');
+const logger = require('./config/logging');
 
 // Инициализация приложения
-_info("🚀 Запуск приложения...");
+logger.info("🚀 Запуск приложения...");
 
 // Загрузка переменных окружения
 require("dotenv").config();
-_info("📋 Переменные окружения загружены");
+logger.info("📋 Переменные окружения загружены");
 
 // Загрузка базовых модулей
 const sequelize = require("./config/database");
-_info("📦 Базовые модули загружены");
+logger.info("📦 Базовые модули загружены");
 
 // Загрузка Sequelize
-_info("📊 Sequelize загружен");
+logger.info("📊 Sequelize загружен");
 
 // Загрузка остальных модулей
 const { sslConfig, generateSelfSignedCert } = require("./config/ssl");
 const { errorHandler, notFoundHandler } = require("./services/errors");
-_info("📦 Остальные модули загружены");
+logger.info("📦 Остальные модули загружены");
 
 // Загрузка роутов
 const authRoutes = require("./routes/auth");
@@ -109,6 +118,36 @@ const _limiter = rateLimit({
 });
 // app.use('/api/', _limiter); // отключено для разработки
 
+// Применяем настройки безопасности
+configureSecurityMiddleware(app);
+
+// Cookie parser
+app.use(cookieParser());
+
+// Session configuration
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'your-super-secret-key-change-in-production',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: process.env.NODE_ENV === 'production',
+    httpOnly: true,
+    sameSite: 'strict',
+    maxAge: 24 * 60 * 60 * 1000 // 24 hours
+  }
+}));
+
+// Security monitoring
+app.use(monitorSuspiciousActivity);
+
+// CSRF protection with monitoring
+app.use(generateToken);
+app.use('/api', monitorCSRF);
+app.use('/api', verifyToken);
+
+// Добавляем логирование API запросов
+app.use(apiLogger);
+
 // API Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/auth", telegramAuthRoutes);
@@ -134,6 +173,9 @@ app.use("/api/employees", userRoutes);
 app.use("/api/logs", workLogRoutes);
 app.use("/api/settings", systemConfigRoutes);
 app.use("/api/system-config", systemConfigRoutes);
+
+// Swagger UI
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpecs));
 
 // Health check
 app.get("/health", (req, res) => {
@@ -214,27 +256,39 @@ if (notFoundHandler) {
 }
 
 // Global error handler
-if (errorHandler) {
-  app.use(errorHandler);
+if (globalErrorHandler) {
+  app.use(globalErrorHandler);
 }
+
+// Обработка ошибок
+app.use((err, req, res, next) => {
+  logger.error('Необработанная ошибка:', { 
+    error: err.message,
+    stack: err.stack,
+    path: req.path,
+    method: req.method,
+    userId: req.user?.id
+  });
+  next(err);
+});
 
 // Инициализация
 async function initialize() {
   try {
-    _info("🔄 Начинаем инициализацию...");
+    logger.info("🔄 Начинаем инициализацию...");
 
     // Подключение к базе данных
-    _info("🔗 Подключаемся к БД...");
+    logger.info("🔗 Подключаемся к БД...");
     if (sequelize) {
       await sequelize.authenticate();
-      _info("✅ Подключение к БД установлено");
+      logger.info("✅ Подключение к БД установлено");
 
       // Синхронизация моделей
-      _info("🔄 Синхронизируем модели...");
+      logger.info("🔄 Синхронизируем модели...");
       await sequelize.sync({ force: false });
-      _info("✅ Модели синхронизированы");
+      logger.info("✅ Модели синхронизированы");
     } else {
-      _warn("⚠️ Sequelize недоступен, пропускаем инициализацию БД");
+      logger.warn("⚠️ Sequelize недоступен, пропускаем инициализацию БД");
     }
 
     // Генерация SSL сертификатов (если нужно)
@@ -243,12 +297,11 @@ async function initialize() {
     }
 
     // Запуск сервера
-    _info("➡️ Перед запуском app.listen");
+    logger.info("➡️ Перед запуском app.listen");
 
     // HTTP сервер
     app.listen(PORT, () => {
-      _info("HTTP сервер запущен");
-      _info(`✅ HTTP сервер запущен на порту ${PORT}`);
+      logger.info(`🚀 Сервер запущен на порту ${PORT}`);
     });
 
     // HTTPS сервер (если настроен)
@@ -256,53 +309,53 @@ async function initialize() {
       const https = require("https");
       const httpsServer = https.createServer(sslConfig.options, app);
       httpsServer.listen(HTTPS_PORT, () => {
-        _info("HTTPS сервер запущен");
-        _info(`🔐 HTTPS сервер запущен на порту ${HTTPS_PORT}`);
+        logger.info("HTTPS сервер запущен");
+        logger.info(`🔐 HTTPS сервер запущен на порту ${HTTPS_PORT}`);
       });
     }
 
     // Инициализация Telegram бота
-    _info("🤖 Инициализируем Telegram бота...");
+    logger.info("🤖 Инициализируем Telegram бота...");
     if (process.env.TELEGRAM_BOT_TOKEN) {
       // ___TimeBot.init(); // Временно отключено для тестирования
-      _info("Telegram бот временно отключён для тестирования API уведомлений");
+      logger.info("Telegram бот временно отключён для тестирования API уведомлений");
     }
 
     // Инициализация системы событий
-    _info("📡 Инициализируем систему событий...");
+    logger.info("📡 Инициализируем систему событий...");
     try {
       const { _eventEmitter } = require("./events/eventEmitter");
-      _info("✅ Система событий инициализирована");
+      logger.info("✅ Система событий инициализирована");
     } catch (err) {
-      _warn("⚠️ Система событий недоступна:", err.message);
+      logger.warn("⚠️ Система событий недоступна:", err.message);
     }
 
     // Инициализация планировщика напоминаний
-    _info("⏰ Инициализируем планировщик напоминаний...");
+    logger.info("⏰ Инициализируем планировщик напоминаний...");
     try {
       const { _scheduler } = require("./cron/scheduler");
-      _info("✅ Планировщик напоминаний инициализирован");
+      logger.info("✅ Планировщик напоминаний инициализирован");
     } catch (err) {
-      _warn("⚠️ Планировщик напоминаний недоступен:", err.message);
+      logger.warn("⚠️ Планировщик напоминаний недоступен:", err.message);
     }
 
     // Инициализация системы алертов
-    _info("🚨 Инициализируем систему алертов...");
+    logger.info("🚨 Инициализируем систему алертов...");
     try {
       const { alertSystem } = require("./utils/alerts");
       if (alertSystem && alertSystem.init) {
         alertSystem.init();
-        _info("✅ Система алертов инициализирована");
+        logger.info("✅ Система алертов инициализирована");
       } else {
-        _warn("⚠️ Система алертов недоступна");
+        logger.warn("⚠️ Система алертов недоступна");
       }
     } catch (err) {
-      _warn("⚠️ Система алертов недоступна:", err.message);
+      logger.warn("⚠️ Система алертов недоступна:", err.message);
     }
 
-    _info("🎉 Инициализация завершена успешно!");
+    logger.info("🎉 Инициализация завершена успешно!");
   } catch (err) {
-    _error("❌ Ошибка инициализации:", err);
+    logger.error("❌ Ошибка инициализации:", err);
     process.exit(1);
   }
 }
@@ -311,7 +364,7 @@ async function initialize() {
 try {
   initialize();
 } catch (err) {
-  _error("❌ Критическая ошибка при запуске приложения:", err);
-  _error("Stack trace:", err.stack);
+  logger.error("❌ Критическая ошибка при запуске приложения:", err);
+  logger.error("Stack trace:", err.stack);
   process.exit(1);
 }

@@ -8,27 +8,67 @@ const { User } = require("../models");
 const { Op } = require("sequelize");
 const { info: _info, error: _error, warn: _warn, debug: _debug } = require("../utils/logger");
 const { HTTP_STATUS_CODES, LIMITS, TIME_CONSTANTS } = require("../constants");
+const { body } = require("express-validator");
 
 const router = express.Router();
 
-// Rate limiting для авторизации
-const loginLimiter = rateLimit({
-  windowMs: 15 * TIME_CONSTANTS.MINUTE, // 15 минут
-  max: process.env.NODE_ENV === "production" ? 5 : LIMITS.DEFAULT_PAGE_SIZE, // 5 для production, LIMITS.DEFAULT_PAGE_SIZE для разработки
-  message: {
-    success: false,
-    message: "Слишком много попыток входа. Попробуйте через 15 минут.",
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
-// Аутентификация
+/**
+ * @swagger
+ * /auth/login:
+ *   post:
+ *     summary: Аутентификация пользователя
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - username
+ *               - password
+ *             properties:
+ *               username:
+ *                 type: string
+ *                 description: Имя пользователя
+ *               password:
+ *                 type: string
+ *                 description: Пароль пользователя
+ *     responses:
+ *       200:
+ *         description: Успешная аутентификация
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 token:
+ *                   type: string
+ *                   description: JWT токен
+ *                 user:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: integer
+ *                       description: ID пользователя
+ *                     username:
+ *                       type: string
+ *                       description: Имя пользователя
+ *                     role:
+ *                       type: string
+ *                       description: Роль пользователя
+ *       401:
+ *         description: Неверные учетные данные
+ *       500:
+ *         description: Внутренняя ошибка сервера
+ */
 router.post(
   "/login",
-  loginLimiter,
-  AuthController.loginValidation,
-  AuthController.login,
+  [
+    body("username").notEmpty().withMessage("Username is required"),
+    body("password").notEmpty().withMessage("Password is required"),
+  ],
+  AuthController.login
 );
 
 // Верификация токена

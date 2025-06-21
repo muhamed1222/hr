@@ -7,137 +7,147 @@ const { WorkLog, User } = require("../models");
 const { Op } = require("sequelize");
 const moment = require("moment");
 const { notifyWorkLogEdited: _notifyWorkLogEdited } = require("../utils/sendTelegramMessage");
+const CacheService = require('../services/CacheService');
 
 const router = express.Router();
 
+// Кэшируем GET запросы на 10 минут
+const WORK_LOGS_CACHE_TTL = 600;
+
 // Получить логи за период
-router.get("/", async (req, res) => {
-  try {
-    const {
-      startDate,
-      endDate,
-      userId,
-      workMode,
-      page = 1,
-      limit = LIMITS.DEFAULT_PAGE_SIZE,
-    } = req.query;
+router.get("/", 
+  CacheService.cacheMiddleware('work-logs-list', WORK_LOGS_CACHE_TTL),
+  async (req, res) => {
+    try {
+      const {
+        startDate,
+        endDate,
+        userId,
+        workMode,
+        page = 1,
+        limit = LIMITS.DEFAULT_PAGE_SIZE,
+      } = req.query;
 
-    const offset = (page - 1) * limit;
+      const offset = (page - 1) * limit;
 
-    const whereClause = {};
+      const whereClause = {};
 
-    // Фильтры
-    if (startDate && endDate) {
-      whereClause.workDate = {
-        [Op.between]: [startDate, endDate],
-      };
-    }
+      // Фильтры
+      if (startDate && endDate) {
+        whereClause.workDate = {
+          [Op.between]: [startDate, endDate],
+        };
+      }
 
-    if (userId) {
-      whereClause.userId = userId;
-    }
+      if (userId) {
+        whereClause.userId = userId;
+      }
 
-    if (workMode) {
-      whereClause.workMode = workMode;
-    }
+      if (workMode) {
+        whereClause.workMode = workMode;
+      }
 
-    const { rows: workLogs, count } = await WorkLog.findAndCountAll({
-      where: whereClause,
-      include: [
-        {
-          model: User,
-          as: "user",
-          attributes: ["id", "name", "username", "role"],
-        },
-      ],
-      order: [["workDate", "DESC"]],
-      limit: parseInt(limit),
-      offset: offset,
-    });
-
-    res.json({
-      success: true,
-      data: workLogs,
-      pagination: {
-        page: parseInt(page),
+      const { rows: workLogs, count } = await WorkLog.findAndCountAll({
+        where: whereClause,
+        include: [
+          {
+            model: User,
+            as: "user",
+            attributes: ["id", "name", "username", "role"],
+          },
+        ],
+        order: [["workDate", "DESC"]],
         limit: parseInt(limit),
-        total: count,
-        pages: Math.ceil(count / limit),
-      },
-    });
-  } catch (error) {
-    logger.error("Ошибка получения логов:", error);
-    res.status(LIMITS.MAX_TEAM_MEMBERS0).json({
-      success: false,
-      message: "Ошибка получения данных",
-    });
+        offset: offset,
+      });
+
+      res.json({
+        success: true,
+        data: workLogs,
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total: count,
+          pages: Math.ceil(count / limit),
+        },
+      });
+    } catch (error) {
+      logger.error("Ошибка получения логов:", error);
+      res.status(LIMITS.MAX_TEAM_MEMBERS0).json({
+        success: false,
+        message: "Ошибка получения данных",
+      });
+    }
   }
-});
+);
 
 // Получить статистику за период
-router.get("/stats", async (req, res) => {
-  try {
-    const { startDate, endDate, userId } = req.query;
+router.get("/stats", 
+  CacheService.cacheMiddleware('work-logs-stats', WORK_LOGS_CACHE_TTL),
+  async (req, res) => {
+    try {
+      const { startDate, endDate, userId } = req.query;
 
-    const whereClause = {};
+      const whereClause = {};
 
-    if (startDate && endDate) {
-      whereClause.workDate = {
-        [Op.between]: [startDate, endDate],
-      };
-    }
+      if (startDate && endDate) {
+        whereClause.workDate = {
+          [Op.between]: [startDate, endDate],
+        };
+      }
 
-    if (userId) {
-      whereClause.userId = userId;
-    }
+      if (userId) {
+        whereClause.userId = userId;
+      }
 
-    const logs = await WorkLog.findAll({
-      where: whereClause,
-      include: [
-        {
-          model: User,
-          as: "user",
-          attributes: ["id", "name"],
+      const logs = await WorkLog.findAll({
+        where: whereClause,
+        include: [
+          {
+            model: User,
+            as: "user",
+            attributes: ["id", "name"],
+          },
+        ],
+      });
+
+      // Вычисляем статистику
+      const stats = {
+        totalDays: logs.length,
+        totalWorkMinutes: logs.reduce(
+          (sum, log) => sum + (log.totalMinutes || 0),
+          0,
+        ),
+        averageWorkHours: 0,
+        workModeStats: {
+          office: logs.filter((log) => log.workMode === "office").length,
+          remote: logs.filter((log) => log.workMode === "remote").length,
+          sick: logs.filter((log) => log.workMode === "sick").length,
+          vacation: logs.filter((log) => log.workMode === "vacation").length,
         },
-      ],
-    });
+        lateArrivals: logs.filter((log) => {
+          if (!log.arrivedAt) return false;
+          const arrivalTime = moment(log.arrivedAt, "HH:mm:ss");
+          const expectedTime = moment("09:00:00", "HH:mm:ss");
+          return arrivalTime.isAfter(expectedTime);
+        }).length,
+      };
 
-    // Вычисляем статистику
-    const stats = {
-      totalDays: logs.length,
-      totalWorkMinutes: logs.reduce(
-        (sum, log) => sum + (log.totalMinutes || 0),
-        0,
-      ),
-      averageWorkHours: 0,
-      workModeStats: {
-        office: logs.filter((log) => log.workMode === "office").length,
-        remote: logs.filter((log) => log.workMode === "remote").length,
-        sick: logs.filter((log) => log.workMode === "sick").length,
-        vacation: logs.filter((log) => log.workMode === "vacation").length,
-      },
-      lateArrivals: logs.filter((log) => {
-        if (!log.arrivedAt) return false;
-        const arrivalTime = moment(log.arrivedAt, "HH:mm:ss");
-        const expectedTime = moment("09:00:00", "HH:mm:ss");
-        return arrivalTime.isAfter(expectedTime);
-      }).length,
-    };
+      stats.averageWorkHours =
+        stats.totalDays > 0
+          ? (stats.totalWorkMinutes / stats.totalDays / 60).toFixed(1)
+          : 0;
 
-    stats.averageWorkHours =
-      stats.totalDays > 0
-        ? (stats.totalWorkMinutes / stats.totalDays / 60).toFixed(1)
-        : 0;
-
-    res.json(stats);
-  } catch (error) {
-    logger.error("Ошибка получения статистики:", error);
-    res.status(LIMITS.MAX_TEAM_MEMBERS0).json({
-      success: false,
-      message: "Ошибка получения статистики",
-    });
+      res.json(stats);
+    } catch (error) {
+      logger.error("Ошибка получения статистики:", error);
+      res.status(LIMITS.MAX_TEAM_MEMBERS0).json({
+        success: false,
+        message: "Ошибка получения статистики",
+      });
+    }
   }
-});
+);
 
 // Получить сводку по команде за сегодня (важно: этот маршрут должен быть ДО /:userId/:date)
 router.get("/team/today", async (req, res) => {
@@ -371,59 +381,64 @@ router.patch("/:id", async (req, res) => {
 });
 
 // Обновить лог (PUT для полного обновления - только для админов)
-router.put("/:id", async (req, res) => {
-  try {
-    const { id } = req.params;
-    const updates = req.body;
+router.put("/:id", 
+  CacheService.invalidateCache('work-logs-list'),
+  CacheService.invalidateCache('work-log-details'),
+  CacheService.invalidateCache('work-logs-stats'),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      const updates = req.body;
 
-    const workLog = await WorkLog.findByPk(id);
+      const workLog = await WorkLog.findByPk(id);
 
-    if (!workLog) {
-      return res.status(404).json({
+      if (!workLog) {
+        return res.status(404).json({
+          success: false,
+          message: "Запись не найдена",
+        });
+      }
+
+      // Пересчитываем общее время работы если обновляются времена
+      if (
+        updates.arrivedAt ||
+        updates.leftAt ||
+        updates.lunchStart ||
+        updates.lunchEnd
+      ) {
+        updates.totalMinutes = calculateWorkTime(
+          updates.arrivedAt || workLog.arrivedAt,
+          updates.leftAt || workLog.leftAt,
+          updates.lunchStart || workLog.lunchStart,
+          updates.lunchEnd || workLog.lunchEnd,
+        );
+      }
+
+      await workLog.update(updates);
+
+      const updatedLog = await WorkLog.findByPk(id, {
+        include: [
+          {
+            model: User,
+            as: "user",
+            attributes: ["id", "name", "username"],
+          },
+        ],
+      });
+
+      res.json({
+        success: true,
+        data: updatedLog,
+      });
+    } catch (error) {
+      logger.error("Ошибка обновления лога:", error);
+      res.status(LIMITS.MAX_TEAM_MEMBERS0).json({
         success: false,
-        message: "Запись не найдена",
+        message: "Ошибка обновления данных",
       });
     }
-
-    // Пересчитываем общее время работы если обновляются времена
-    if (
-      updates.arrivedAt ||
-      updates.leftAt ||
-      updates.lunchStart ||
-      updates.lunchEnd
-    ) {
-      updates.totalMinutes = calculateWorkTime(
-        updates.arrivedAt || workLog.arrivedAt,
-        updates.leftAt || workLog.leftAt,
-        updates.lunchStart || workLog.lunchStart,
-        updates.lunchEnd || workLog.lunchEnd,
-      );
-    }
-
-    await workLog.update(updates);
-
-    const updatedLog = await WorkLog.findByPk(id, {
-      include: [
-        {
-          model: User,
-          as: "user",
-          attributes: ["id", "name", "username"],
-        },
-      ],
-    });
-
-    res.json({
-      success: true,
-      data: updatedLog,
-    });
-  } catch (error) {
-    logger.error("Ошибка обновления лога:", error);
-    res.status(LIMITS.MAX_TEAM_MEMBERS0).json({
-      success: false,
-      message: "Ошибка обновления данных",
-    });
   }
-});
+);
 
 // Вспомогательные функции
 function calculateWorkTime(arrivedAt, leftAt, lunchStart, lunchEnd) {

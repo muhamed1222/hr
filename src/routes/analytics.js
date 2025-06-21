@@ -3,6 +3,7 @@
 const express = require("express");
 const router = express.Router();
 const { info: _info, error: _error, warn: _warn, debug: _debug } = require("../utils/logger");
+const CacheService = require('../services/CacheService');
 
 const { Op, _Sequelize } = require("sequelize");
 const { authenticateToken } = require("../middleware/auth");
@@ -22,6 +23,9 @@ const LIMITS = {
   MAX_PAGE_SIZE: 100,
   MAX_PAGE_SIZE0: 1000,
 };
+
+// Кэшируем GET запросы на 5 минут
+const ANALYTICS_CACHE_TTL = 300;
 
 // Middleware для проверки прав
 const requireManagerOrAdmin = (req, res, next) => {
@@ -462,5 +466,28 @@ async function _getPunctualityData(_dateRange, _rowNumber) {
 async function _getWorkModeData(_dateRange, _rowNumber) {
   return {};
 }
+
+// Маршруты аналитики
+router.get('/dashboard', 
+  CacheService.cacheMiddleware('dashboard', ANALYTICS_CACHE_TTL),
+  async (req, res) => {
+    // ... существующий код ...
+  }
+);
+
+router.get('/reports', 
+  CacheService.cacheMiddleware('reports', ANALYTICS_CACHE_TTL),
+  async (req, res) => {
+    // ... существующий код ...
+  }
+);
+
+// Инвалидация кэша при обновлении данных
+router.post('/reports',
+  CacheService.invalidateCache('reports'),
+  async (req, res) => {
+    // ... существующий код ...
+  }
+);
 
 module.exports = router;
