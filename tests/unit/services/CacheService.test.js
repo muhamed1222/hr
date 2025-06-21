@@ -1,4 +1,4 @@
-const CacheService = require('../../../src/services/CacheService');
+const { CacheService } = require('../../../src/services/CacheService');
 const Redis = require('ioredis');
 
 // Мокаем Redis
@@ -24,57 +24,127 @@ describe('CacheService', () => {
     jest.clearAllMocks();
   });
 
-  describe('get', () => {
-    it('должен возвращать данные из кэша', async () => {
-      const mockData = JSON.stringify({ key: 'value' });
-      mockRedisClient.get.mockResolvedValue(mockData);
+  describe('set and get', () => {
+    it('should store and retrieve a value', async () => {
+      // Arrange
+      const key = 'testKey';
+      const value = { data: 'testValue' };
 
-      const result = await cacheService.get('test-key');
+      // Act
+      await cacheService.set(key, value);
+      const result = await cacheService.get(key);
 
-      expect(result).toEqual({ key: 'value' });
-      expect(mockRedisClient.get).toHaveBeenCalledWith('test-key');
+      // Assert
+      expect(result).toEqual(value);
     });
 
-    it('должен возвращать null если данных нет в кэше', async () => {
-      mockRedisClient.get.mockResolvedValue(null);
+    it('should return null for non-existent key', async () => {
+      // Act
+      const result = await cacheService.get('nonExistentKey');
 
-      const result = await cacheService.get('test-key');
+      // Assert
+      expect(result).toBeNull();
+    });
 
+    it('should respect TTL and expire items', async () => {
+      // Arrange
+      const key = 'expiringKey';
+      const value = 'expiringValue';
+      const ttl = 1; // 1 second
+
+      // Act
+      await cacheService.set(key, value, ttl);
+      
+      // Wait for TTL to expire
+      await new Promise(resolve => setTimeout(resolve, 1100));
+      
+      const result = await cacheService.get(key);
+
+      // Assert
       expect(result).toBeNull();
     });
   });
 
-  describe('set', () => {
-    it('должен сохранять данные в кэш с TTL', async () => {
-      const data = { key: 'value' };
-      const ttl = 3600;
+  describe('delete', () => {
+    it('should delete an existing key', async () => {
+      // Arrange
+      const key = 'deleteKey';
+      const value = 'deleteValue';
+      await cacheService.set(key, value);
 
-      await cacheService.set('test-key', data, ttl);
+      // Act
+      await cacheService.delete(key);
+      const result = await cacheService.get(key);
 
-      expect(mockRedisClient.setex).toHaveBeenCalledWith(
-        'test-key',
-        ttl,
-        JSON.stringify(data)
-      );
+      // Assert
+      expect(result).toBeNull();
     });
 
-    it('должен сохранять данные в кэш без TTL', async () => {
-      const data = { key: 'value' };
-
-      await cacheService.set('test-key', data);
-
-      expect(mockRedisClient.set).toHaveBeenCalledWith(
-        'test-key',
-        JSON.stringify(data)
-      );
+    it('should not throw error when deleting non-existent key', async () => {
+      // Act & Assert
+      await expect(cacheService.delete('nonExistentKey')).resolves.not.toThrow();
     });
   });
 
-  describe('delete', () => {
-    it('должен удалять данные из кэша', async () => {
-      await cacheService.delete('test-key');
+  describe('clear', () => {
+    it('should remove all cached items', async () => {
+      // Arrange
+      await cacheService.set('key1', 'value1');
+      await cacheService.set('key2', 'value2');
 
-      expect(mockRedisClient.del).toHaveBeenCalledWith('test-key');
+      // Act
+      await cacheService.clear();
+
+      // Assert
+      const result1 = await cacheService.get('key1');
+      const result2 = await cacheService.get('key2');
+      expect(result1).toBeNull();
+      expect(result2).toBeNull();
+    });
+  });
+
+  describe('getOrSet', () => {
+    it('should return cached value if exists', async () => {
+      // Arrange
+      const key = 'cachedKey';
+      const value = 'cachedValue';
+      await cacheService.set(key, value);
+      const fetchFn = jest.fn();
+
+      // Act
+      const result = await cacheService.getOrSet(key, fetchFn);
+
+      // Assert
+      expect(result).toBe(value);
+      expect(fetchFn).not.toHaveBeenCalled();
+    });
+
+    it('should fetch and cache value if not exists', async () => {
+      // Arrange
+      const key = 'newKey';
+      const value = 'newValue';
+      const fetchFn = jest.fn().mockResolvedValue(value);
+
+      // Act
+      const result = await cacheService.getOrSet(key, fetchFn);
+      const cachedValue = await cacheService.get(key);
+
+      // Assert
+      expect(result).toBe(value);
+      expect(cachedValue).toBe(value);
+      expect(fetchFn).toHaveBeenCalledTimes(1);
+    });
+
+    it('should handle fetch function errors', async () => {
+      // Arrange
+      const key = 'errorKey';
+      const error = new Error('Fetch failed');
+      const fetchFn = jest.fn().mockRejectedValue(error);
+
+      // Act & Assert
+      await expect(cacheService.getOrSet(key, fetchFn)).rejects.toThrow(error);
+      const cachedValue = await cacheService.get(key);
+      expect(cachedValue).toBeNull();
     });
   });
 

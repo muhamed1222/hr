@@ -1,95 +1,163 @@
-const AuthService = require('../../../src/services/AuthService');
-const { User } = require('../../../src/models');
-const { AppError } = require('../../../src/services/errors/AppError');
+const { AuthService } = require('../../../src/services/AuthService');
+const { User } = require('../../../src/models/User');
+const { AppError } = require('../../../src/services/errors');
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
 
-// Мокаем модель User
-jest.mock('../../../src/models', () => ({
-  User: {
-    findOne: jest.fn(),
-    create: jest.fn()
-  }
-}));
+jest.mock('../../../src/models/User');
+jest.mock('bcrypt');
+jest.mock('jsonwebtoken');
 
 describe('AuthService', () => {
+  let authService;
+
   beforeEach(() => {
-    // Очищаем все моки перед каждым тестом
+    authService = new AuthService();
     jest.clearAllMocks();
   });
 
   describe('login', () => {
-    it('должен успешно аутентифицировать пользователя с правильными учетными данными', async () => {
-      const mockUser = {
-        id: 1,
+    const mockUser = {
+      id: 1,
+      email: 'test@example.com',
+      password: 'hashedPassword',
+      name: 'Test User'
+    };
+
+    it('should successfully login user with valid credentials', async () => {
+      // Arrange
+      const credentials = {
         email: 'test@example.com',
-        password: '$2b$10$mockHashedPassword',
-        comparePassword: jest.fn().mockResolvedValue(true)
+        password: 'correctPassword'
       };
 
       User.findOne.mockResolvedValue(mockUser);
+      bcrypt.compare.mockResolvedValue(true);
+      jwt.sign.mockReturnValue('mockToken');
 
-      const result = await AuthService.login('test@example.com', 'password123');
+      // Act
+      const result = await authService.login(credentials);
 
-      expect(result).toBeDefined();
-      expect(result.token).toBeDefined();
-      expect(User.findOne).toHaveBeenCalledWith({
-        where: { email: 'test@example.com' }
+      // Assert
+      expect(result).toEqual({
+        token: 'mockToken',
+        user: expect.objectContaining({
+          id: mockUser.id,
+          email: mockUser.email,
+          name: mockUser.name
+        })
       });
-      expect(mockUser.comparePassword).toHaveBeenCalledWith('password123');
+      expect(User.findOne).toHaveBeenCalledWith({
+        where: { email: credentials.email }
+      });
+      expect(bcrypt.compare).toHaveBeenCalledWith(
+        credentials.password,
+        mockUser.password
+      );
     });
 
-    it('должен выбрасывать ошибку при неверных учетных данных', async () => {
-      const mockUser = {
-        comparePassword: jest.fn().mockResolvedValue(false)
-      };
-
-      User.findOne.mockResolvedValue(mockUser);
-
-      await expect(AuthService.login('test@example.com', 'wrongpassword'))
-        .rejects
-        .toThrow(AppError);
-    });
-
-    it('должен выбрасывать ошибку, если пользователь не найден', async () => {
+    it('should throw error when user not found', async () => {
+      // Arrange
       User.findOne.mockResolvedValue(null);
 
-      await expect(AuthService.login('nonexistent@example.com', 'password123'))
-        .rejects
-        .toThrow(AppError);
+      // Act & Assert
+      await expect(
+        authService.login({
+          email: 'nonexistent@example.com',
+          password: 'anyPassword'
+        })
+      ).rejects.toThrow(AppError);
+    });
+
+    it('should throw error when password is incorrect', async () => {
+      // Arrange
+      User.findOne.mockResolvedValue(mockUser);
+      bcrypt.compare.mockResolvedValue(false);
+
+      // Act & Assert
+      await expect(
+        authService.login({
+          email: mockUser.email,
+          password: 'wrongPassword'
+        })
+      ).rejects.toThrow(AppError);
     });
   });
 
   describe('register', () => {
-    it('должен успешно регистрировать нового пользователя', async () => {
-      const mockUser = {
-        id: 1,
-        email: 'new@example.com',
-        name: 'Test User'
-      };
+    const mockUserData = {
+      email: 'new@example.com',
+      password: 'password123',
+      name: 'New User'
+    };
 
+    it('should successfully register new user', async () => {
+      // Arrange
       User.findOne.mockResolvedValue(null);
-      User.create.mockResolvedValue(mockUser);
-
-      const result = await AuthService.register({
-        email: 'new@example.com',
-        password: 'password123',
-        name: 'Test User'
+      bcrypt.hash.mockResolvedValue('hashedPassword');
+      User.create.mockResolvedValue({
+        id: 1,
+        ...mockUserData,
+        password: 'hashedPassword'
       });
+      jwt.sign.mockReturnValue('mockToken');
 
-      expect(result).toBeDefined();
-      expect(result.token).toBeDefined();
-      expect(User.create).toHaveBeenCalled();
+      // Act
+      const result = await authService.register(mockUserData);
+
+      // Assert
+      expect(result).toEqual({
+        token: 'mockToken',
+        user: expect.objectContaining({
+          id: 1,
+          email: mockUserData.email,
+          name: mockUserData.name
+        })
+      });
+      expect(User.create).toHaveBeenCalledWith({
+        ...mockUserData,
+        password: 'hashedPassword'
+      });
     });
 
-    it('должен выбрасывать ошибку, если email уже существует', async () => {
+    it('should throw error when user already exists', async () => {
+      // Arrange
       User.findOne.mockResolvedValue({ id: 1 });
 
-      await expect(AuthService.register({
-        email: 'existing@example.com',
-        password: 'password123',
-        name: 'Test User'
-      }))
-        .rejects
-        .toThrow(AppError);
+      // Act & Assert
+      await expect(
+        authService.register(mockUserData)
+      ).rejects.toThrow(AppError);
+    });
+  });
+
+  describe('verifyToken', () => {
+    it('should return decoded token data for valid token', () => {
+      // Arrange
+      const mockDecodedData = { userId: 1 };
+      jwt.verify.mockReturnValue(mockDecodedData);
+
+      // Act
+      const result = authService.verifyToken('validToken');
+
+      // Assert
+      expect(result).toEqual(mockDecodedData);
+      expect(jwt.verify).toHaveBeenCalledWith(
+        'validToken',
+        process.env.JWT_SECRET
+      );
+    });
+
+    it('should throw error for invalid token', () => {
+      // Arrange
+      jwt.verify.mockImplementation(() => {
+        throw new Error('Invalid token');
+      });
+
+      // Act & Assert
+      expect(() => {
+        authService.verifyToken('invalidToken');
+      }).toThrow(AppError);
     });
   });
 }); 

@@ -1,32 +1,62 @@
 module.exports = {
-  preset: 'ts-jest',
-  testEnvironment: 'node',
-  setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],
+  // Базовая директория для всех тестов
+  roots: ['<rootDir>/tests'],
+
+  // Файлы тестов
   testMatch: [
-    '<rootDir>/tests/**/*.test.ts',
-    '<rootDir>/tests/**/*.spec.ts'
+    '**/__tests__/**/*.+(ts|tsx|js)',
+    '**/?(*.)+(spec|test).+(ts|tsx|js)'
   ],
+
+  // Трансформация TypeScript
+  transform: {
+    '^.+\\.(ts|tsx)$': 'ts-jest'
+  },
+
+  // Настройка покрытия кода
+  collectCoverage: true,
+  collectCoverageFrom: [
+    'src/**/*.{js,ts}',
+    '!src/migrations/**',
+    '!src/config/**',
+    '!src/types/**',
+    '!**/node_modules/**'
+  ],
+  coverageDirectory: 'coverage',
+  coverageReporters: ['text', 'lcov', 'clover'],
+  coverageThreshold: {
+    global: {
+      branches: 80,
+      functions: 80,
+      lines: 80,
+      statements: 80
+    }
+  },
+
+  // Настройка окружения
+  testEnvironment: 'node',
+  setupFilesAfterEnv: ['<rootDir>/tests/setup.js'],
+
+  // Модули и алиасы
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1'
   },
-  collectCoverageFrom: [
-    'src/**/*.ts',
-    '!src/migrations/**',
-    '!src/database/seed.ts',
-    '!src/app.ts'
-  ],
-  coverageDirectory: 'coverage',
-  coverageReporters: ['text', 'lcov', 'html'],
-  coverageThreshold: {
-    global: {
-      branches: 70,
-      functions: 70,
-      lines: 70,
-      statements: 70
-    }
-  },
+  moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
+
+  // Игнорируемые пути
+  testPathIgnorePatterns: ['/node_modules/', '/dist/'],
+
+  // Таймаут для тестов
   testTimeout: 10000,
+
+  // Параллельное выполнение тестов
+  maxWorkers: '50%',
+
+  // Вывод информации о тестах
   verbose: true,
-  // Мокируем переменные окружения для тестов
-  setupFiles: ['<rootDir>/tests/env.setup.ts']
+  
+  // Очистка моков
+  clearMocks: true,
+  resetMocks: true,
+  restoreMocks: true
 }; 
