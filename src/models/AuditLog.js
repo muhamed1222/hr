@@ -1,12 +1,11 @@
 "use strict";
 
 const { _info, _error, _warn, _debug } = require("../utils/logger");
-
-const { DataTypes } = require("sequelize");
-const sequelize = require("../config/database");
 const { LIMITS } = require("../constants");
+const { DataTypes } = require("sequelize");
+const _sequelize = require("../config/database");
 
-const AuditLog = sequelize.define(
+const AuditLog = _sequelize.define(
   "AuditLog",
   {
     id: {

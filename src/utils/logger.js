@@ -1,12 +1,11 @@
 "use strict";
 
-const _winston = require("winston");
-const _path = require("path");
-const { _info, _error, _warn, _debug } = require("./logger");
+const path = require('path');
+const fs = require('fs');
+const winston = require('winston');
 
 // Создаем директорию для логов если её нет
 const logsDir = path.join(__dirname, "../../logs");
-const _fs = require("fs");
 if (!fs.existsSync(logsDir)) {
   fs.mkdirSync(logsDir, { recursive: true });
 }
@@ -15,20 +14,20 @@ if (!fs.existsSync(logsDir)) {
 const level = process.env.NODE_ENV === "production" ? "info" : "debug";
 
 // Создаем форматтер для консоли
-const consoleFormat = _winston.format.combine(
-  _winston.format.colorize(),
-  _winston.format.timestamp({ format: "HH:mm:ss" }),
-  _winston.format.printf(({ level, message, timestamp, service }) => {
+const consoleFormat = winston.format.combine(
+  winston.format.colorize(),
+  winston.format.timestamp({ format: "HH:mm:ss" }),
+  winston.format.printf(({ level, message, timestamp, service }) => {
     const serviceTag = service ? `[${service}]` : "";
     return `${timestamp} ${level} ${serviceTag}: ${message}`;
   }),
 );
 
 // Создаем форматтер для файлов
-const fileFormat = _winston.format.combine(
-  _winston.format.timestamp(),
-  _winston.format.errors({ stack: true }),
-  _winston.format.json(),
+const fileFormat = winston.format.combine(
+  winston.format.timestamp(),
+  winston.format.errors({ stack: true }),
+  winston.format.json(),
 );
 
 // Конфигурация транспортов
@@ -36,7 +35,7 @@ const transports = [
   // Логи в консоль (только для development)
   ...(process.env.NODE_ENV !== "production"
     ? [
-        new _winston.transports.Console({
+        new winston.transports.Console({
           level,
           format: consoleFormat,
         }),
@@ -44,7 +43,7 @@ const transports = [
     : []),
 
   // Общие логи
-  new _winston.transports.File({
+  new winston.transports.File({
     filename: path.join(logsDir, "app.log"),
     level: "info",
     format: fileFormat,
@@ -53,7 +52,7 @@ const transports = [
   }),
 
   // Логи ошибок
-  new _winston.transports.File({
+  new winston.transports.File({
     filename: path.join(logsDir, "error.log"),
     level: "error",
     format: fileFormat,
@@ -62,7 +61,7 @@ const transports = [
   }),
 
   // Логи аудита (критичные действия)
-  new _winston.transports.File({
+  new winston.transports.File({
     filename: path.join(logsDir, "audit.log"),
     level: "warn",
     format: fileFormat,
@@ -72,7 +71,7 @@ const transports = [
 ];
 
 // Создаем основной логгер
-const logger = _winston.createLogger({
+const logger = winston.createLogger({
   level,
   format: fileFormat,
   transports,
@@ -94,10 +93,10 @@ module.exports = {
   createServiceLogger,
 
   // Удобные функции для логирования
-  info: (...args) => _info(...args),
-  error: (...args) => _error(...args),
-  warn: (...args) => _warn(...args),
-  debug: (...args) => _debug(...args),
+  info: (...args) => logger.info(...args),
+  error: (...args) => logger.error(...args),
+  warn: (...args) => logger.warn(...args),
+  debug: (...args) => logger.debug(...args),
 
   // Специальные функции
   audit: (action, userId, details = {}) => {
@@ -133,22 +132,17 @@ module.exports = {
     const authLogger = createServiceLogger("auth");
     authLogger.info(event, details);
   },
-
-  _info,
-  _error,
-  _warn,
-  _debug,
 };
 
 // Обработка необработанных исключений и промисов
 logger.exceptions.handle(
-  new _winston.transports.File({
+  new winston.transports.File({
     filename: path.join(logsDir, "exceptions.log"),
   }),
 );
 
 logger.rejections.handle(
-  new _winston.transports.File({
+  new winston.transports.File({
     filename: path.join(logsDir, "rejections.log"),
   }),
 );

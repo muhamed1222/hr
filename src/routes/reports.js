@@ -1,39 +1,41 @@
 "use strict";
 
-const _express = require("express");
+const express = require("express");
 const router = express.Router();
 const { Workbook } = require("excel-builder-vanilla");
-const _PDFDocument = require("pdfkit");
-const _fs = require("fs");
-const _path = require("path");
+const PDFDocument = require("pdfkit");
+const fs = require("fs");
+const path = require("path");
 const { WorkLog, User } = require("../models");
 const { Op } = require("sequelize");
 const { notifyReportExported } = require("../utils/sendTelegramMessage");
-const { _info, _error } = require("../utils/logger");
+const { info: _info, error: _error } = require("../utils/logger");
 const { authenticateToken } = require("../middleware/auth");
 
 // Константы
 const LIMITS = {
-  DEFAULT_PAGE_SIZE: LIMITS.DEFAULT_PAGE_SIZE,
-  MAX_PAGE_SIZE: LIMITS.MAX_PAGE_SIZE,
-  MAX_PAGE_SIZE0: LIMITS.MAX_PAGE_SIZE0,
+  DEFAULT_PAGE_SIZE: 20,
+  MAX_PAGE_SIZE: 100,
+  MAX_PAGE_SIZE0: 1000,
+  MAX_TEAM_MEMBERS: 50,
+  MAX_TEAM_MEMBERS0: 500,
 };
 
 const SLICE_TIME_LENGTH = 5;
 const CLEANUP_DELAY_MINUTES = 5;
 const CLEANUP_DELAY_SECONDS = 60;
-const MILLISECONDS_PER_SECOND = LIMITS.MAX_PAGE_SIZE0;
+const MILLISECONDS_PER_SECOND = 1000;
 const FILE_CLEANUP_DELAY =
   CLEANUP_DELAY_MINUTES * CLEANUP_DELAY_SECONDS * MILLISECONDS_PER_SECOND; // 5 минут
 const PDF_FONT_TITLE = 18;
 const PDF_FONT_SUBTITLE = 12;
 const PDF_FONT_CONTENT = 10;
-const PDF_MARGIN = LIMITS.DEFAULT_PAGE_SIZE;
+const PDF_MARGIN = 20;
 const PDF_RECORDS_PER_PAGE = 15;
 const PDF_LINE_HEIGHT = 15;
 const PDF_Y_OFFSET = 2;
-const HTTP_SERVER_ERROR = LIMITS.MAX_TEAM_MEMBERS0;
-const REPORT_MAX_LENGTH = LIMITS.MAX_PAGE_SIZE;
+const HTTP_SERVER_ERROR = 500;
+const REPORT_MAX_LENGTH = 100;
 
 // Создать директорию для экспорта, если её нет
 const exportsDir = path.join(__dirname, "../public/exports");

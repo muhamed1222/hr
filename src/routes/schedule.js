@@ -1,10 +1,10 @@
 "use strict";
 
-const { _info, _error, _warn, _debug } = require("../utils/logger");
+const { info: _info, error: _error, warn: _warn, debug: _debug } = require("../utils/logger");
 
-const _express = require("express");
+const express = require("express");
 const { Op } = require("sequelize");
-const _moment = require("moment");
+const moment = require("moment");
 const { User, Team, UserTeam, WorkLog } = require("../models");
 const { authenticateToken } = require("../middleware/auth");
 
@@ -34,7 +34,7 @@ router.get("/month", async (req, res) => {
     const endDate = targetMonth.clone().endOf("month").format("YYYY-MM-DD");
 
     // Определяем пользователей для отображения
-    const _targetUsers = [];
+    let targetUsers = [];
 
     if (userId) {
       // Конкретный пользователь
@@ -129,7 +129,7 @@ router.get("/month", async (req, res) => {
     const calendar = {};
     const daysInMonth = targetMonth.daysInMonth();
 
-    for (let _day = 1; day <= daysInMonth; day++) {
+    for (let day = 1; day <= daysInMonth; day++) {
       const currentDate = targetMonth.clone().date(day).format("YYYY-MM-DD");
       const dayOfWeek = targetMonth.clone().date(day).day();
 

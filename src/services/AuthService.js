@@ -2,7 +2,7 @@
 
 const _bcrypt = require("bcryptjs");
 const _jwt = require("jsonwebtoken");
-const { User, Team } = require("../models");
+const { User } = require("../models");
 const {
   ValidationError,
   AuthenticationError,

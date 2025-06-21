@@ -6,22 +6,30 @@
  */
 
 const { performance } = require("perf_hooks");
-const _os = require("os");
+const os = require("os");
 
 // Константы
 const LIMITS = {
-  DEFAULT_PAGE_SIZE: LIMITS.DEFAULT_PAGE_SIZE,
-  MAX_PAGE_SIZE: LIMITS.MAX_PAGE_SIZE,
-  MAX_PAGE_SIZE0: LIMITS.MAX_PAGE_SIZE0,
+  DEFAULT_PAGE_SIZE: 20,
+  MAX_PAGE_SIZE: 100,
+  MAX_PAGE_SIZE0: 1000,
 };
 
 const HTTP_STATUS_CODES = {
-  BAD_REQUEST: HTTP_STATUS_CODES.BAD_REQUEST,
-  UNAUTHORIZED: HTTP_STATUS_CODES.UNAUTHORIZED,
-  FORBIDDEN: HTTP_STATUS_CODES.FORBIDDEN,
-  NOT_FOUND: HTTP_STATUS_CODES.NOT_FOUND,
-  INTERNAL_SERVER_ERROR: HTTP_STATUS_CODES.INTERNAL_SERVER_ERROR,
+  BAD_REQUEST: 400,
+  UNAUTHORIZED: 401,
+  FORBIDDEN: 403,
+  NOT_FOUND: 404,
+  INTERNAL_SERVER_ERROR: 500,
 };
+
+const TIME_CONSTANTS = {
+  MINUTE: 60 * 1000,
+  HOUR: 60 * 60 * 1000,
+  DAY: 24 * 60 * 60 * 1000,
+};
+
+const CACHE_CLEANUP_INTERVAL = TIME_CONSTANTS.MINUTE * 30; // 30 минут
 
 class MetricsCollector {
   constructor() {
@@ -158,7 +166,7 @@ class MetricsCollector {
           -LIMITS.MAX_PAGE_SIZE,
         );
       }
-    }, 30000); // каждые 30 секунд
+    }, CACHE_CLEANUP_INTERVAL); // каждые 30 минут
   }
 
   // Получение статистики

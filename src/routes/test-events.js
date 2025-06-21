@@ -1,14 +1,23 @@
 "use strict";
 
-const { _info, _error, _warn, _debug } = require("../utils/logger");
+const { info: _info, error: _error, warn: _warn, debug: _debug } = require("../utils/logger");
 
-const _express = require("express");
-const router = _express.Router();
+const express = require("express");
+const router = express.Router();
 const { emitEvent } = require("../events/notifyOnEvent");
-const { _notifyNewUser } = require("../notifications/notifyNewUser");
-const { _notifyUserPromoted } = require("../notifications/notifyUserPromoted");
-const { _notifyMissedWorklog } = require("../notifications/notifyMissedWorklog");
-const { _notifyTeamStats } = require("../notifications/notifyTeamStats");
+const { notifyNewUser: _notifyNewUser } = require("../notifications/notifyNewUser");
+const { notifyUserPromoted: _notifyUserPromoted } = require("../notifications/notifyUserPromoted");
+const { notifyMissedWorklog: _notifyMissedWorklog } = require("../notifications/notifyMissedWorklog");
+const { notifyTeamStats: _notifyTeamStats } = require("../notifications/notifyTeamStats");
+const { LIMITS } = require("../constants");
+
+const HTTP_STATUS_CODES = {
+  BAD_REQUEST: 400,
+  UNAUTHORIZED: 401,
+  FORBIDDEN: 403,
+  NOT_FOUND: 404,
+  INTERNAL_SERVER_ERROR: 500,
+};
 
 /**
  * Тестирование события создания пользователя

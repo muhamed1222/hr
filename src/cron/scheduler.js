@@ -1,6 +1,6 @@
 "use strict";
 
-const { info, error, warn, debug } = require("../utils/logger");
+const { error } = require("../utils/logger");
 
 const cron = require("node-cron");
 const moment = require("moment");
@@ -31,6 +31,8 @@ const EVENING_HOUR = 17;
 const DAILY_STATS_HOUR = 18;
 const DAILY_STATS_MINUTE = 30;
 const WORK_DAYS = "1-5";
+const DEFAULT_WORK_HOURS = 8;
+const DEFAULT_HOURS_PER_DAY = 9;
 
 class ReminderScheduler {
   constructor() {
@@ -306,7 +308,7 @@ class ReminderScheduler {
           absentEmployees:
             (stats.totalEmployees || 0) - (stats.presentToday || 0),
           reportsSubmitted: stats.reportsSubmitted || 0,
-          averageWorkHours: stats.averageWorkHours || 8,
+          averageWorkHours: stats.averageWorkHours || DEFAULT_WORK_HOURS,
           managers: managers.map((m) => ({
             id: m.id,
             firstName: m.name,
@@ -389,7 +391,7 @@ class ReminderScheduler {
     const today = now.clone();
 
     return {
-      morning: today.clone().hour(9).minute(MORNING_REMINDER_MINUTE).second(0),
+      morning: today.clone().hour(DEFAULT_HOURS_PER_DAY).minute(MORNING_REMINDER_MINUTE).second(0),
       lunchStart: today.clone().hour(LUNCH_START_HOUR).minute(0).second(0),
       lunchEnd: today.clone().hour(LUNCH_END_HOUR).minute(0).second(0),
       evening: today

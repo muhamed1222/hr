@@ -1,21 +1,13 @@
 "use strict";
 
-const _express = require("express");
-const _rateLimit = require("express-rate-limit");
-const _AuthController = require("../controllers/AuthController");
+const express = require("express");
+const rateLimit = require("express-rate-limit");
+const AuthController = require("../controllers/AuthController");
 const { authenticateToken } = require("../middleware/auth");
-
-// Константы
-const TIME_CONSTANTS = {
-  MINUTE: 60 * LIMITS.MAX_PAGE_SIZE0, // 1 минута в миллисекундах
-  HOUR: 60 * TIME_CONSTANTS.MINUTE, // 1 час в миллисекундах
-  DAY: 24 * 60 * TIME_CONSTANTS.MINUTE, // 1 день в миллисекундах
-};
-
-const LIMITS = {
-  DEFAULT_PAGE_SIZE: LIMITS.DEFAULT_PAGE_SIZE,
-  MAX_PAGE_SIZE0: LIMITS.MAX_PAGE_SIZE0,
-};
+const { User } = require("../models");
+const { Op } = require("sequelize");
+const { info: _info, error: _error, warn: _warn, debug: _debug } = require("../utils/logger");
+const { HTTP_STATUS_CODES, LIMITS, TIME_CONSTANTS } = require("../constants");
 
 const router = express.Router();
 

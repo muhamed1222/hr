@@ -1,9 +1,22 @@
 "use strict";
 
-const { _info, _error, _warn, _debug } = require("../utils/logger");
-
-const _express = require("express");
+const express = require("express");
 const router = express.Router();
+const { info: _info, error: _error, warn: _warn, debug: _debug } = require("../utils/logger");
+
+const HTTP_STATUS_CODES = {
+  BAD_REQUEST: 400,
+  UNAUTHORIZED: 401,
+  FORBIDDEN: 403,
+  NOT_FOUND: 404,
+  INTERNAL_SERVER_ERROR: 500,
+};
+const LIMITS = {
+  DEFAULT_PAGE_SIZE: 20,
+  MAX_PAGE_SIZE: 100,
+  MAX_PAGE_SIZE0: 1000,
+};
+
 const {
   getUsersForMorningReminder,
   getUsersForLunchStartReminder,
@@ -138,8 +151,8 @@ router.post("/test/:type", async (req, res) => {
 router.post("/send/:type", async (req, res) => {
   try {
     const { type } = req.params;
-    const _users = [];
-    const _reminderType = "";
+    let users = [];
+    let reminderType = "";
 
     switch (type) {
       case "morning":
@@ -173,7 +186,7 @@ router.post("/send/:type", async (req, res) => {
       });
     }
 
-    const _sent = 0;
+    let sent = 0;
     const results = [];
 
     for (const user of users) {
@@ -231,7 +244,7 @@ router.post("/stats/send", async (req, res) => {
       });
     }
 
-    const _sent = 0;
+    let sent = 0;
     const results = [];
 
     for (const manager of managers) {

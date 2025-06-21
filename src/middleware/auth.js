@@ -1,17 +1,17 @@
 "use strict";
 
-const { _info, _error, _warn, _debug } = require("../utils/logger");
+const { info: _info, error: _error, warn: _warn, debug: _debug } = require("../utils/logger");
 
-const _jwt = require("jsonwebtoken");
+const jwt = require("jsonwebtoken");
 const { User, Team, UserTeam } = require("../models");
-const { _AuthenticationError, _AuthorizationError } = require("../services/errors");
+const { AuthenticationError: _AuthenticationError, AuthorizationError: _AuthorizationError } = require("../services/errors");
 
 // HTTP статус коды
 const HTTP_STATUS_CODES = {
-  UNAUTHORIZED: HTTP_STATUS_CODES.UNAUTHORIZED,
-  FORBIDDEN: HTTP_STATUS_CODES.FORBIDDEN,
-  NOT_FOUND: HTTP_STATUS_CODES.NOT_FOUND,
-  INTERNAL_SERVER_ERROR: HTTP_STATUS_CODES.INTERNAL_SERVER_ERROR,
+  UNAUTHORIZED: 401,
+  FORBIDDEN: 403,
+  NOT_FOUND: 404,
+  INTERNAL_SERVER_ERROR: 500,
 };
 
 /**

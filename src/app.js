@@ -1,6 +1,6 @@
 "use strict";
 
-const { _info, _error, _warn, _debug } = require("./utils/logger");
+const { info: _info, error: _error, warn: _warn, debug: _debug } = require("./utils/logger");
 const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
@@ -28,6 +28,7 @@ _info("📦 Остальные модули загружены");
 
 // Загрузка роутов
 const authRoutes = require("./routes/auth");
+const telegramAuthRoutes = require("./routes/telegram-auth");
 const telegramAdminRoutes = require("./routes/telegram-admin");
 const userRoutes = require("./routes/users");
 const usersManagementRoutes = require("./routes/users-management");
@@ -100,8 +101,8 @@ if (metricsRoutes && metricsRoutes.middleware) {
 }
 
 // Rate limiting (временно отключено для разработки)
-const RATE_LIMIT_WINDOW_MS = 15 * TIME_CONSTANTS.MINUTE; // 15 минут
-const RATE_LIMIT_MAX_REQUESTS = LIMITS.MAX_PAGE_SIZE0; // увеличен лимит для разработки
+const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000; // 15 минут
+const RATE_LIMIT_MAX_REQUESTS = 1000; // увеличен лимит для разработки
 const _limiter = rateLimit({
   windowMs: RATE_LIMIT_WINDOW_MS,
   max: RATE_LIMIT_MAX_REQUESTS,
@@ -110,6 +111,8 @@ const _limiter = rateLimit({
 
 // API Routes
 app.use("/api/auth", authRoutes);
+app.use("/api/auth", telegramAuthRoutes);
+app.use("/api/telegram-auth", telegramAuthRoutes);
 app.use("/api/telegram-admin", telegramAdminRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/users-management", usersManagementRoutes);

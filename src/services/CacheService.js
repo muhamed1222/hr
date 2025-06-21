@@ -142,7 +142,7 @@ class CacheService {
    * @returns {Promise<any>}
    */
   async getOrSet(key, fetchFunction, ttl = 300) {
-    const _value = await this.get(key);
+    let value = await this.get(key);
 
     if (value === null) {
       value = await fetchFunction();

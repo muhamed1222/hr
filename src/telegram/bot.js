@@ -1,21 +1,21 @@
 "use strict";
 
-const { info, error, warn, debug } = require("../utils/logger");
-
-const _TelegramBot = require("node-telegram-bot-api");
+const { error: _error } = require("../utils/logger");
+const TelegramBot = require("node-telegram-bot-api");
 const { User, WorkLog, Absence } = require("../models");
-const _moment = require("moment");
+const moment = require("moment");
 const { emitEvent } = require("../events/eventEmitter");
+const { HTTP_STATUS_CODES } = require("../constants");
 require("dotenv").config();
 
 moment.locale("ru");
 
 // Константы для лимитов
 const COOLDOWN_LIMITS = {
-  DEFAULT: HTTP_STATUS_CODES.OK0,
-  MYDAY: HTTP_STATUS_CODES.OK0,
-  EDITREPORT: HTTP_STATUS_CODES.OK0,
-  HISTORY: HTTP_STATUS_CODES.OK0,
+  DEFAULT: 1000, // 1 секунда
+  MYDAY: 3000,   // 3 секунды
+  EDITREPORT: 2000, // 2 секунды
+  HISTORY: 5000, // 5 секунд
 };
 
 class TimeBot {
@@ -64,7 +64,7 @@ class TimeBot {
 
     try {
       // Проверяем, существует ли пользователь
-      const _user = await User.findOne({ where: { telegramId } });
+      let user = await User.findOne({ where: { telegramId } });
 
       if (!user) {
         // Создаём нового пользователя
@@ -92,7 +92,7 @@ class TimeBot {
 
       await this.sendMainMenu(chatId);
     } catch (error) {
-      error("Ошибка в handleStart:", error);
+      console.log("Ошибка в handleStart:", error);
       await this.bot.sendMessage(
         chatId,
         "❌ Произошла ошибка при регистрации. Попробуйте позже.",
@@ -118,7 +118,7 @@ class TimeBot {
         where: { userId: user.id, workDate: today },
       });
 
-      const _message = `📊 Ваш день (${moment().format("DD.MM.YYYY")}):\n\n`;
+      let message = `📊 Ваш день (${moment().format("DD.MM.YYYY")}):\n\n`;
 
       if (workLog) {
         message += `🟢 Пришёл: ${workLog.arrivedAt || "Не отмечено"}\n`;
@@ -140,7 +140,7 @@ class TimeBot {
 
       await this.bot.sendMessage(chatId, message);
     } catch (error) {
-      error("Ошибка в handleMyDay:", error);
+      console.log("Ошибка в handleMyDay:", error);
       await this.sendUserFriendlyError(chatId, "command_error", {
         command: "myday",
       });
@@ -198,7 +198,7 @@ class TimeBot {
           `Напишите новый отчёт или отправьте /cancel для отмены:`,
       );
     } catch (error) {
-      error("Ошибка в handleEditReport:", error);
+      console.log("Ошибка в handleEditReport:", error);
       await this.sendUserFriendlyError(chatId, "command_error", {
         command: "editreport",
       });
@@ -250,16 +250,16 @@ class TimeBot {
         limit: LIMITS.DEFAULT_PAGE_SIZE, // Ограничиваем количество записей для удобства чтения
       });
 
-      const _message = `📚 *История работы (последние 30 дней)*\n\n`;
+      let message = `📚 *История работы (последние 30 дней)*\n\n`;
 
       if (workLogs.length === 0) {
         message += "❌ За последние 30 дней записей не найдено";
       } else {
         // Общая статистика
-        const _totalMinutes = 0;
-        const _workDays = 0;
-        const _reportsCount = 0;
-        const _lateArrivals = 0;
+        let totalMinutes = 0;
+        let workDays = 0;
+        let reportsCount = 0;
+        let lateArrivals = 0;
 
         workLogs.forEach((log) => {
           totalMinutes += log.totalMinutes || 0;
@@ -316,7 +316,7 @@ class TimeBot {
         disable_web_page_preview: true,
       });
     } catch (error) {
-      error("Ошибка в handleHistory:", error);
+      console.log("Ошибка в handleHistory:", error);
       await this.sendUserFriendlyError(chatId, "stats_error", {
         statsType: "history",
       });
@@ -413,17 +413,17 @@ class TimeBot {
         order: [["workDate", "ASC"]],
       });
 
-      const _message = `📅 *Последние 5 рабочих дней (${startDate.format("DD.MM")} - ${endDate.format("DD.MM.YYYY")})*\n\n`;
+      let message = `📅 *Последние 5 рабочих дней (${startDate.format("DD.MM")} - ${endDate.format("DD.MM.YYYY")})*\n\n`;
 
       // Статистика
-      const _totalMinutes = 0;
-      const _actualWorkDays = 0;
-      const _remoteDays = 0;
-      const _officeDays = 0;
-      const _sickDays = 0;
-      const _vacationDays = 0;
-      const _reportsCount = 0;
-      const _lateArrivals = 0;
+      let totalMinutes = 0;
+      let actualWorkDays = 0;
+      let remoteDays = 0;
+      let officeDays = 0;
+      let sickDays = 0;
+      let vacationDays = 0;
+      let reportsCount = 0;
+      let lateArrivals = 0;
 
       // Создаём карту рабочих дней
       const dayMap = new Map();
@@ -535,7 +535,7 @@ class TimeBot {
         disable_web_page_preview: true,
       });
     } catch (error) {
-      error("Ошибка в handleMyWeek:", error);
+      console.log("Ошибка в handleMyWeek:", error);
       await this.sendUserFriendlyError(chatId, "stats_error", {
         statsType: "weekly",
       });
@@ -580,7 +580,7 @@ class TimeBot {
         );
       }
 
-      const _message = this.formatTeamData(teamData);
+      let message = this.formatTeamData(teamData);
 
       // Добавляем deep links для менеджеров
       const webAppUrl = process.env.WEB_APP_URL || "https://your-domain.com";
@@ -595,7 +595,7 @@ class TimeBot {
         disable_web_page_preview: true,
       });
     } catch (error) {
-      error("Ошибка в handleTeam:", error);
+      console.log("Ошибка в handleTeam:", error);
       await this.sendUserFriendlyError(chatId, "database_error");
     }
   }
@@ -611,7 +611,6 @@ class TimeBot {
       });
 
       // Получаем рабочие логи за сегодня
-      const { Op } = require("sequelize");
       const workLogs = await WorkLog.findAll({
         where: {
           workDate: today,
@@ -647,7 +646,7 @@ class TimeBot {
 
       return teamSummary;
     } catch (error) {
-      error("Ошибка получения данных команды:", error);
+      console.log("Ошибка получения данных команды:", error);
       return null;
     }
   }
@@ -666,16 +665,16 @@ class TimeBot {
 
   formatTeamData(teamData) {
     const today = moment().format("DD.MM.YYYY");
-    const _message = `👥 *Команда на ${today}*\n\n`;
+    let message = `👥 *Команда на ${today}*\n\n`;
 
     // Статистика
-    const _totalEmployees = 0;
-    const _working = 0;
-    const _finished = 0;
-    const _notStarted = 0;
-    const _onLunch = 0;
-    const _sick = 0;
-    const _onVacation = 0;
+    let totalEmployees = 0;
+    let working = 0;
+    let finished = 0;
+    let notStarted = 0;
+    let onLunch = 0;
+    let sick = 0;
+    let onVacation = 0;
 
     // Группируем по статусам
     const statusGroups = {
@@ -783,7 +782,7 @@ class TimeBot {
             ? "🏢"
             : "";
 
-      const _timeInfo = "";
+      let timeInfo = "";
       if (workLog) {
         const arrival = workLog.arrivedAt
           ? workLog.arrivedAt.substring(0, 5)
@@ -835,8 +834,8 @@ class TimeBot {
         where: { userId: user.id, workDate: today },
       });
 
-      const _actionType = "";
-      const _successMessage = "";
+      let actionType = "";
+      let successMessage = "";
 
       switch (data) {
         case "arrived_office":
@@ -970,7 +969,7 @@ class TimeBot {
         show_alert: false,
       });
     } catch (error) {
-      error("Ошибка в handleCallback:", error);
+      console.log("Ошибка в handleCallback:", error);
       await this.sendUserFriendlyError(chatId, "database_error");
       await this.bot.answerCallbackQuery(callbackQuery.id, {
         text: "❌ Ошибка",
@@ -984,7 +983,7 @@ class TimeBot {
       const telegramId = chatId; // В некоторых случаях может отличаться
       const user = await User.findOne({ where: { telegramId } });
 
-      const _statusInfo = "";
+      let statusInfo = "";
       if (user) {
         const today = moment().format("YYYY-MM-DD");
         const workLog = await WorkLog.findOne({
@@ -1040,7 +1039,7 @@ class TimeBot {
         parse_mode: "Markdown",
       });
     } catch (error) {
-      error("Ошибка в sendMainMenu:", error);
+      console.log("Ошибка в sendMainMenu:", error);
       // Fallback to simple menu
       const keyboard = {
         inline_keyboard: [
@@ -1105,7 +1104,7 @@ class TimeBot {
         { parse_mode: "Markdown" },
       );
     } catch (error) {
-      error("Ошибка в markArrival:", error);
+      console.log("Ошибка в markArrival:", error);
       await this.sendUserFriendlyError(chatId, "database_error");
     }
   }
@@ -1135,7 +1134,7 @@ class TimeBot {
         { parse_mode: "Markdown" },
       );
     } catch (error) {
-      error("Ошибка в markLunchStart:", error);
+      console.log("Ошибка в markLunchStart:", error);
       await this.sendUserFriendlyError(chatId, "database_error");
     }
   }
@@ -1165,7 +1164,7 @@ class TimeBot {
         { parse_mode: "Markdown" },
       );
     } catch (error) {
-      error("Ошибка в markLunchEnd:", error);
+      console.log("Ошибка в markLunchEnd:", error);
       await this.sendUserFriendlyError(chatId, "database_error");
     }
   }
@@ -1209,7 +1208,7 @@ class TimeBot {
         { parse_mode: "Markdown" },
       );
     } catch (error) {
-      error("Ошибка в markLeaving:", error);
+      console.log("Ошибка в markLeaving:", error);
       await this.sendUserFriendlyError(chatId, "database_error");
     }
   }
@@ -1220,7 +1219,7 @@ class TimeBot {
     const arrivalTime = moment(workLog.arrivedAt, "HH:mm:ss");
     const leaveTime = moment(leftAt, "HH:mm:ss");
 
-    const _totalMinutes = leaveTime.diff(arrivalTime, "minutes");
+    let totalMinutes = leaveTime.diff(arrivalTime, "minutes");
 
     // Вычитаем время обеда, если был
     if (workLog.lunchStart && workLog.lunchEnd) {
@@ -1270,7 +1269,7 @@ class TimeBot {
         await this.sendMainMenu(chatId);
       }
     } catch (error) {
-      error("Ошибка в handleTextMessage:", error);
+      console.log("Ошибка в handleTextMessage:", error);
       await this.bot.sendMessage(chatId, "❌ Ошибка обработки сообщения");
     }
   }
@@ -1305,7 +1304,7 @@ class TimeBot {
       // Показываем краткую сводку дня
       await this.sendDaySummary(chatId, workLog);
     } catch (error) {
-      error("Ошибка в handleDailyReport:", error);
+      console.log("Ошибка в handleDailyReport:", error);
       await this.bot.sendMessage(chatId, "❌ Ошибка сохранения отчёта");
     }
   }
@@ -1347,7 +1346,7 @@ class TimeBot {
           `🆕 Новый: "${workLog.dailyReport}"`,
       );
     } catch (error) {
-      error("Ошибка в handleEditDailyReport:", error);
+      console.log("Ошибка в handleEditDailyReport:", error);
       await this.bot.sendMessage(chatId, "❌ Ошибка обновления отчёта");
     }
   }
@@ -1388,7 +1387,7 @@ class TimeBot {
         { parse_mode: "Markdown" },
       );
     } catch (error) {
-      error("Ошибка в markSickDay:", error);
+      console.log("Ошибка в markSickDay:", error);
       await this.sendUserFriendlyError(chatId, "database_error");
     }
   }
@@ -1429,7 +1428,7 @@ class TimeBot {
         { parse_mode: "Markdown" },
       );
     } catch (error) {
-      error("Ошибка в markVacationDay:", error);
+      console.log("Ошибка в markVacationDay:", error);
       await this.sendUserFriendlyError(chatId, "database_error");
     }
   }
@@ -1460,8 +1459,8 @@ class TimeBot {
         },
       });
 
-      const _weekTotal = 0;
-      const _weekDays = 0;
+      let weekTotal = 0;
+      let weekDays = 0;
       weekLogs.forEach((log) => {
         if (log.workMode === "office" || log.workMode === "remote") {
           weekTotal += log.totalMinutes || 0;
@@ -1469,7 +1468,7 @@ class TimeBot {
         }
       });
 
-      const _message = `📊 *Ваша статистика*\n\n`;
+      let message = `📊 *Ваша статистика*\n\n`;
 
       // Сегодняшний день
       message += `📅 *Сегодня (${moment().format("DD.MM.YYYY")}):*\n`;
@@ -1522,7 +1521,7 @@ class TimeBot {
         disable_web_page_preview: true,
       });
     } catch (error) {
-      error("Ошибка в showUserStats:", error);
+      console.log("Ошибка в showUserStats:", error);
       await this.sendUserFriendlyError(chatId, "stats_error", {
         statsType: "user",
       });
@@ -1644,7 +1643,7 @@ class TimeBot {
         "📊 Не удалось получить статистику {statsType}. Проверьте подключение",
     };
 
-    const _message = errorMessages[errorType] || "❌ Произошла неизвестная ошибка";
+    let message = errorMessages[errorType] || "❌ Произошла неизвестная ошибка";
 
     // Подставляем контекстные данные
     Object.keys(context).forEach((key) => {
@@ -1713,7 +1712,7 @@ class TimeBot {
 
       await this.showAbsenceTypes(chatId, user);
     } catch (error) {
-      error("Ошибка в handleAbsence:", error);
+      console.log("Ошибка в handleAbsence:", error);
       await this.sendUserFriendlyError(chatId, "command_error", {
         command: "absence",
       });
@@ -1730,14 +1729,14 @@ class TimeBot {
 
       await this.showMyAbsences(chatId, user);
     } catch (error) {
-      error("Ошибка в handleAbsences:", error);
+      console.log("Ошибка в handleAbsences:", error);
       await this.sendUserFriendlyError(chatId, "command_error", {
         command: "absences",
       });
     }
   }
 
-  async showAbsenceTypes(chatId, user) {
+  async showAbsenceTypes(chatId, _user) {
     const keyboard = {
       inline_keyboard: [
         [
@@ -1785,7 +1784,7 @@ class TimeBot {
         );
       }
 
-      const _message = `📋 *Ваши заявки на отсутствие*\n\n`;
+      let message = `📋 *Ваши заявки на отсутствие*\n\n`;
 
       absences.forEach((absence, index) => {
         const statusEmoji = {
@@ -1837,7 +1836,7 @@ class TimeBot {
         disable_web_page_preview: true,
       });
     } catch (error) {
-      error("Ошибка в showMyAbsences:", error);
+      console.log("Ошибка в showMyAbsences:", error);
       await this.sendUserFriendlyError(chatId, "database_error");
     }
   }
@@ -1880,7 +1879,7 @@ class TimeBot {
 
     try {
       switch (state.step) {
-        case "start_date":
+        case "start_date": {
           const startDate = this.parseDate(text);
           if (!startDate) {
             return await this.bot.sendMessage(
@@ -1900,8 +1899,9 @@ class TimeBot {
               `📅 Теперь укажите дату окончания в формате ДД.ММ.ГГГГ`,
           );
           break;
+        }
 
-        case "end_date":
+        case "end_date": {
           const endDate = this.parseDate(text);
           if (!endDate) {
             return await this.bot.sendMessage(
@@ -1931,8 +1931,9 @@ class TimeBot {
               `(необязательно, можете отправить "-" чтобы пропустить)`,
           );
           break;
+        }
 
-        case "reason":
+        case "reason": {
           const reason = text === "-" ? null : text;
           state.reason = reason;
 
@@ -1940,9 +1941,10 @@ class TimeBot {
           await this.createAbsenceRequest(chatId, user, state);
           this.userStates.delete(user.telegramId);
           break;
+        }
       }
     } catch (error) {
-      error("Ошибка в processAbsenceRequest:", error);
+      console.log("Ошибка в processAbsenceRequest:", error);
       this.userStates.delete(user.telegramId);
       await this.sendUserFriendlyError(chatId, "database_error");
     }
@@ -1992,7 +1994,7 @@ class TimeBot {
         timestamp: new Date(),
       });
     } catch (error) {
-      error("Ошибка создания заявки:", error);
+      console.log("Ошибка создания заявки:", error);
       await this.sendUserFriendlyError(chatId, "database_error");
     }
   }
@@ -2082,7 +2084,7 @@ class TimeBot {
         text: "✅ Заявка одобрена!",
       });
     } catch (error) {
-      error("Ошибка в handleAbsenceManagement:", error);
+      console.log("Ошибка в handleAbsenceManagement:", error);
       await this.bot.answerCallbackQuery(callbackQuery.id, {
         text: "❌ Ошибка обработки",
         show_alert: true,
@@ -2141,7 +2143,7 @@ class TimeBot {
 
       return `${statusEmoji} Заявка на ${typeText} ${statusText}`;
     } catch (error) {
-      error("Ошибка обработки решения:", error);
+      console.log("Ошибка обработки решения:", error);
       throw error;
     }
   }
@@ -2200,7 +2202,7 @@ class TimeBot {
         parse_mode: "Markdown",
       });
     } catch (error) {
-      error("Ошибка отклонения заявки:", error);
+      console.log("Ошибка отклонения заявки:", error);
       await this.bot.sendMessage(chatId, "❌ Ошибка при отклонении заявки");
     }
   }

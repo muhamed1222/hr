@@ -1,6 +1,6 @@
 "use strict";
 
-const { _info, _error, _warn, _debug } = require("../../utils/logger");
+const { info: _info, error: _error, warn: _warn, debug: _debug } = require("../../utils/logger");
 
 // Константы для HTTP статусов
 const HTTP_STATUS_CODES = {

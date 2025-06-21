@@ -1,14 +1,27 @@
 "use strict";
 
-const { _info, _error, _warn, _debug } = require("../utils/logger");
-
-const _express = require("express");
+const express = require("express");
 const router = express.Router();
+const { info: _info, error: _error, warn: _warn, debug: _debug } = require("../utils/logger");
+
 const { Op, _Sequelize } = require("sequelize");
 const { authenticateToken } = require("../middleware/auth");
 const { User, WorkLog, _Team, _UserTeam } = require("../models");
 const __ExcelJS = require("exceljs");
 const __PDFDocument = require("pdfkit");
+
+const HTTP_STATUS_CODES = {
+  BAD_REQUEST: 400,
+  UNAUTHORIZED: 401,
+  FORBIDDEN: 403,
+  NOT_FOUND: 404,
+  INTERNAL_SERVER_ERROR: 500,
+};
+const LIMITS = {
+  DEFAULT_PAGE_SIZE: 20,
+  MAX_PAGE_SIZE: 100,
+  MAX_PAGE_SIZE0: 1000,
+};
 
 // Middleware для проверки прав
 const requireManagerOrAdmin = (req, res, next) => {
@@ -30,7 +43,7 @@ router.get("/", authenticateToken, requireManagerOrAdmin, async (req, res) => {
       startDate ||
       new Date(
         Date.now() -
-          30 * 24 * 60 * TIME_CONSTANTS.MINUTE * LIMITS.MAX_PAGE_SIZE0,
+          30 * TIME_CONSTANTS.HOURS_PER_DAY * 60 * TIME_CONSTANTS.MINUTE * LIMITS.MAX_PAGE_SIZE0,
       )
         .toISOString()
         .split("T")[0];
@@ -108,7 +121,7 @@ router.get(
         startDate ||
         new Date(
           Date.now() -
-            30 * 24 * 60 * TIME_CONSTANTS.MINUTE * LIMITS.MAX_PAGE_SIZE0,
+            30 * TIME_CONSTANTS.HOURS_PER_DAY * 60 * TIME_CONSTANTS.MINUTE * LIMITS.MAX_PAGE_SIZE0,
         )
           .toISOString()
           .split("T")[0];
@@ -247,7 +260,7 @@ router.get(
         startDate ||
         new Date(
           Date.now() -
-            30 * 24 * 60 * TIME_CONSTANTS.MINUTE * LIMITS.MAX_PAGE_SIZE0,
+            30 * TIME_CONSTANTS.HOURS_PER_DAY * 60 * TIME_CONSTANTS.MINUTE * LIMITS.MAX_PAGE_SIZE0,
         )
           .toISOString()
           .split("T")[0];
@@ -341,7 +354,7 @@ router.get(
           lastLogin: {
             [Op.gte]: new Date(
               Date.now() -
-                7 * 24 * 60 * TIME_CONSTANTS.MINUTE * LIMITS.MAX_PAGE_SIZE0,
+                TIME_CONSTANTS.DAYS_PER_WEEK * TIME_CONSTANTS.HOURS_PER_DAY * 60 * TIME_CONSTANTS.MINUTE * LIMITS.MAX_PAGE_SIZE0,
             ),
           },
         },
@@ -379,7 +392,7 @@ router.get(
         startDate ||
         new Date(
           Date.now() -
-            30 * 24 * 60 * TIME_CONSTANTS.MINUTE * LIMITS.MAX_PAGE_SIZE0,
+            30 * TIME_CONSTANTS.HOURS_PER_DAY * 60 * TIME_CONSTANTS.MINUTE * LIMITS.MAX_PAGE_SIZE0,
         )
           .toISOString()
           .split("T")[0];

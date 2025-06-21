@@ -1,6 +1,7 @@
 "use strict";
 
 const { Sequelize } = require("sequelize");
+const { logger } = require("../utils/logger");
 
 // Конфигурация базы данных
 const sequelize = new Sequelize({
@@ -10,11 +11,11 @@ const sequelize = new Sequelize({
 });
 
 // Загрузка определений моделей
-const _UserDefinition = require("./User");
-const _TeamDefinition = require("./Team");
-const _UserTeamDefinition = require("./UserTeam");
-const _WorkLogDefinition = require("./WorkLog");
-const _AuditLogDefinition = require("./AuditLog");
+const UserDefinition = require("./User");
+const TeamDefinition = require("./Team");
+const UserTeamDefinition = require("./UserTeam");
+const WorkLogDefinition = require("./WorkLog");
+const AuditLogDefinition = require("./AuditLog");
 
 // Создание моделей Sequelize
 const User = sequelize.define("User", UserDefinition.definition, {

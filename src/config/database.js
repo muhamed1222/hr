@@ -2,7 +2,8 @@
 
 const { Sequelize } = require("sequelize");
 require("dotenv").config();
-const { debug } = require("../utils/logger");
+const { debug: _debug } = require("../utils/logger");
+const { LIMITS } = require("../constants");
 
 // Определяем конфигурацию в зависимости от типа БД
 let sequelize;
@@ -13,7 +14,7 @@ if (process.env.DATABASE_URL) {
     dialect: "postgres",
     logging:
       process.env.NODE_ENV === "development"
-        ? (sql) => debug("SQL запрос (PostgreSQL)", { sql })
+        ? (sql) => _debug("SQL запрос (PostgreSQL)", { sql })
         : false,
     dialectOptions: {
       ssl:
@@ -38,7 +39,7 @@ if (process.env.DATABASE_URL) {
     storage: process.env.DB_STORAGE || "./database.sqlite",
     logging:
       process.env.NODE_ENV === "development"
-        ? (sql) => debug("SQL запрос (SQLite)", { sql })
+        ? (sql) => _debug("SQL запрос (SQLite)", { sql })
         : false,
   });
 } else {
@@ -52,7 +53,7 @@ if (process.env.DATABASE_URL) {
     dialect: "postgres",
     logging:
       process.env.NODE_ENV === "development"
-        ? (sql) => debug("SQL запрос (PostgreSQL)", { sql })
+        ? (sql) => _debug("SQL запрос (PostgreSQL)", { sql })
         : false,
     timezone: process.env.TZ || "Europe/Moscow",
     pool: {

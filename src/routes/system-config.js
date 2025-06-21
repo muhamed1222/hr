@@ -1,18 +1,21 @@
 "use strict";
 
-const _express = require("express");
+const express = require("express");
 const router = express.Router();
 const { authenticateToken, requireRole } = require("../middleware/auth");
-const { info, error } = require("../utils/logger");
-
-// Константы
-const LIMITS = {
-  DEFAULT_PAGE_SIZE: LIMITS.DEFAULT_PAGE_SIZE,
-  DEFAULT_PAGE_SIZE0: HTTP_STATUS_CODES.INTERNAL_SERVER_ERROR,
-};
+const { info: _info, error: _error, warn: _warn, debug: _debug } = require("../utils/logger");
 
 const HTTP_STATUS_CODES = {
-  INTERNAL_SERVER_ERROR: HTTP_STATUS_CODES.INTERNAL_SERVER_ERROR,
+  BAD_REQUEST: 400,
+  UNAUTHORIZED: 401,
+  FORBIDDEN: 403,
+  NOT_FOUND: 404,
+  INTERNAL_SERVER_ERROR: 500,
+};
+const LIMITS = {
+  DEFAULT_PAGE_SIZE: 20,
+  MAX_PAGE_SIZE: 100,
+  MAX_PAGE_SIZE0: 1000,
 };
 
 /**
@@ -56,7 +59,7 @@ router.get(
         },
       };
 
-      info("Системная конфигурация запрошена", { userId: req.user.id });
+      _info("Системная конфигурация запрошена", { userId: req.user.id });
 
       res.json({
         success: true,
@@ -64,7 +67,7 @@ router.get(
         timestamp: new Date().toISOString(),
       });
     } catch (err) {
-      error("Ошибка получения системной конфигурации:", err);
+      _error("Ошибка получения системной конфигурации:", err);
       res.status(HTTP_STATUS_CODES.INTERNAL_SERVER_ERROR).json({
         success: false,
         message: "Ошибка получения системной конфигурации",
@@ -107,7 +110,7 @@ router.get("/frontend-config", async (req, res) => {
       timestamp: new Date().toISOString(),
     });
   } catch (err) {
-    error("Ошибка получения frontend конфигурации:", err);
+    _error("Ошибка получения frontend конфигурации:", err);
     res.status(HTTP_STATUS_CODES.INTERNAL_SERVER_ERROR).json({
       success: false,
       message: "Ошибка получения frontend конфигурации",
@@ -152,7 +155,7 @@ router.put("/", authenticateToken, requireRole(["admin"]), async (req, res) => {
       },
     };
 
-    info("Системная конфигурация обновлена", {
+    _info("Системная конфигурация обновлена", {
       userId: req.user.id,
       changes: Object.keys(req.body),
     });
@@ -164,7 +167,7 @@ router.put("/", authenticateToken, requireRole(["admin"]), async (req, res) => {
       timestamp: new Date().toISOString(),
     });
   } catch (err) {
-    error("Ошибка обновления системной конфигурации:", err);
+    _error("Ошибка обновления системной конфигурации:", err);
     res.status(HTTP_STATUS_CODES.INTERNAL_SERVER_ERROR).json({
       success: false,
       message: "Ошибка обновления системной конфигурации",

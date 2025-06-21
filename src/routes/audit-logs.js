@@ -1,8 +1,8 @@
 "use strict";
 
-const { _info, _error, _warn, _debug } = require("../utils/logger");
+const { info: _info, error: _error, warn: _warn, debug: _debug } = require("../utils/logger");
 
-const _express = require("express");
+const express = require("express");
 const { AuditLog, User } = require("../models");
 const { Op } = require("sequelize");
 const {
@@ -530,7 +530,7 @@ router.post("/export", requireRole(["admin"]), async (req, res) => {
     });
 
     // Логируем экспорт
-    const _AuditLogger = require("../utils/auditLogger");
+    const AuditLogger = require("../utils/auditLogger");
     await AuditLogger.logReportExported(
       req.user.id,
       `audit_logs_${format}`,

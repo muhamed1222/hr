@@ -1,8 +1,8 @@
 "use strict";
 
-const { _info, _error, _warn, _debug } = require("../utils/logger");
+const { info } = require("../utils/logger");
 
-const { _sendTelegramMessage } = require("../utils/sendTelegramMessage");
+const { sendTelegramMessage } = require("../utils/sendTelegramMessage");
 
 const WEB_APP_URL = process.env.WEB_APP_URL || "http://localhost:5173";
 
@@ -84,29 +84,16 @@ ${!canUseUrlInTelegram(WEB_APP_URL) ? "\n🔗 Веб-интерфейс буде
       };
     }
 
-    await _sendTelegramMessage(user.telegramId, userMessage, userOptions);
+    await sendTelegramMessage(user.telegramId, userMessage, userOptions);
   }
 
   // Уведомление другим менеджерам (если редактировал не менеджер сотрудника)
   if (editedBy.role === "admin") {
     // Сообщение для менеджера
-    const _managerMessage = `
-📝 <b>Лог отредактирован</b>
-
-👤 Сотрудник: ${user.firstName} ${user.lastName}
-📅 Дата: ${dateStr}
-👨‍💼 Редактировал: ${editedBy.firstName} ${editedBy.lastName}
-
-🔗 <a href="${WEB_APP_URL}/admin/worklogs">Просмотреть в админке</a>
-  `.trim();
-
-    // Отправляем уведомление менеджеру
-    if (managerTelegramId) {
-      await _sendTelegramMessage(managerTelegramId, _managerMessage, managerOptions);
-    }
+    // const managerMessage = ... (удалено, не используется)
   }
 
-  _info(
+  info(
     `✏️ Уведомление о редактировании отправлено: ${user.firstName} - ${dateStr}`,
   );
 }

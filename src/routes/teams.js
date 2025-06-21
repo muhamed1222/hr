@@ -1,8 +1,8 @@
 "use strict";
 
-const { _info, _error, _warn, _debug } = require("../utils/logger");
+const { info: _info, error: _error, warn: _warn, debug: _debug } = require("../utils/logger");
 
-const _express = require("express");
+const express = require("express");
 const { Team, User, UserTeam, WorkLog } = require("../models");
 const { Op } = require("sequelize");
 const {
@@ -11,7 +11,7 @@ const {
   requireTeamAccess,
   logRequestInfo,
 } = require("../middleware/auth");
-const _AuditLogger = require("../utils/auditLogger");
+const AuditLogger = require("../utils/auditLogger");
 
 const router = express.Router();
 

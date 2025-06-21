@@ -1,15 +1,15 @@
 "use strict";
 
-const { _info, _error, _warn, _debug } = require("../utils/logger");
+const { info: _info, error: _error, warn: _warn, debug: _debug } = require("../utils/logger");
 
-const _express = require("express");
+const express = require("express");
 const { Op } = require("sequelize");
 const {
   User,
   WorkLog,
-  _Absence,
+  Absence: _Absence,
   Team,
-  _UserTeam,
+  UserTeam: _UserTeam,
   AuditLog,
 } = require("../models");
 const { authenticateToken, requireRole } = require("../middleware/auth");
@@ -98,9 +98,9 @@ router.get("/employees", async (req, res) => {
       const todayLog = employee.workLogs[0];
       const activeAbsence = employee.absences[0];
 
-      const _workStatus = "not_worked";
-      const _statusText = "Не отметился";
-      const _statusColor = "gray";
+      let workStatus = "not_worked";
+      let statusText = "Не отметился";
+      let statusColor = "gray";
 
       if (activeAbsence) {
         workStatus = "absent";
@@ -764,7 +764,7 @@ router.patch(
         });
       }
 
-      const _team = null;
+      let team = null;
       if (teamId) {
         team = await Team.findByPk(teamId);
         if (!team) {

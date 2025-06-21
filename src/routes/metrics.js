@@ -1,28 +1,26 @@
 "use strict";
 
-const { _info, _error, _warn, _debug } = require("../utils/logger");
+const express = require("express");
+const router = express.Router();
+const { info: _info, error: _error, warn: _warn, debug: _debug } = require("../utils/logger");
 
-const _express = require("express");
 const { authenticateToken, requireRole } = require("../middleware/auth");
 const { metrics } = require("../utils/metrics");
 const { alertSystem } = require("../utils/alerts");
 
 // Константы
-const LIMITS = {
-  DEFAULT_PAGE_SIZE: LIMITS.DEFAULT_PAGE_SIZE,
-  MAX_PAGE_SIZE: LIMITS.MAX_PAGE_SIZE,
-  DEFAULT_PAGE_SIZE0: HTTP_STATUS_CODES.INTERNAL_SERVER_ERROR,
-};
-
 const HTTP_STATUS_CODES = {
-  BAD_REQUEST: HTTP_STATUS_CODES.BAD_REQUEST,
-  UNAUTHORIZED: HTTP_STATUS_CODES.UNAUTHORIZED,
-  FORBIDDEN: HTTP_STATUS_CODES.FORBIDDEN,
-  NOT_FOUND: HTTP_STATUS_CODES.NOT_FOUND,
-  INTERNAL_SERVER_ERROR: HTTP_STATUS_CODES.INTERNAL_SERVER_ERROR,
+  BAD_REQUEST: 400,
+  UNAUTHORIZED: 401,
+  FORBIDDEN: 403,
+  NOT_FOUND: 404,
+  INTERNAL_SERVER_ERROR: 500,
 };
-
-const router = express.Router();
+const LIMITS = {
+  DEFAULT_PAGE_SIZE: 20,
+  MAX_PAGE_SIZE: 100,
+  MAX_PAGE_SIZE0: 1000,
+};
 
 // Middleware для аутентификации и авторизации (только админы)
 router.use(authenticateToken);
@@ -45,7 +43,7 @@ router.get("/", async (req, res) => {
     });
   } catch (error) {
     _error("Ошибка получения метрик:", error);
-    res.status(LIMITS.DEFAULT_PAGE_SIZE0).json({
+    res.status(LIMITS.MAX_PAGE_SIZE0).json({
       success: false,
       message: "Ошибка получения метрик",
     });
@@ -76,7 +74,7 @@ router.get("/requests", async (req, res) => {
     });
   } catch (error) {
     _error("Ошибка получения статистики запросов:", error);
-    res.status(LIMITS.DEFAULT_PAGE_SIZE0).json({
+    res.status(LIMITS.MAX_PAGE_SIZE0).json({
       success: false,
       message: "Ошибка получения статистики запросов",
     });
@@ -108,7 +106,7 @@ router.get("/system", async (req, res) => {
     });
   } catch (error) {
     _error("Ошибка получения системной информации:", error);
-    res.status(LIMITS.DEFAULT_PAGE_SIZE0).json({
+    res.status(LIMITS.MAX_PAGE_SIZE0).json({
       success: false,
       message: "Ошибка получения системной информации",
     });
@@ -140,7 +138,7 @@ router.get("/auth", async (req, res) => {
     });
   } catch (error) {
     _error("Ошибка получения статистики аутентификации:", error);
-    res.status(LIMITS.DEFAULT_PAGE_SIZE0).json({
+    res.status(LIMITS.MAX_PAGE_SIZE0).json({
       success: false,
       message: "Ошибка получения статистики аутентификации",
     });
@@ -173,7 +171,7 @@ router.get("/alerts", async (req, res) => {
     });
   } catch (error) {
     _error("Ошибка получения алертов:", error);
-    res.status(LIMITS.DEFAULT_PAGE_SIZE0).json({
+    res.status(LIMITS.MAX_PAGE_SIZE0).json({
       success: false,
       message: "Ошибка получения алертов",
     });
@@ -205,7 +203,7 @@ router.post("/alerts/threshold", async (req, res) => {
     });
   } catch (error) {
     _error("Ошибка настройки порога алерта:", error);
-    res.status(LIMITS.DEFAULT_PAGE_SIZE0).json({
+    res.status(LIMITS.MAX_PAGE_SIZE0).json({
       success: false,
       message: "Ошибка настройки порога алерта",
     });

@@ -1,9 +1,7 @@
 "use strict";
 
-const { _info, _error, _warn, _debug } = require("../utils/logger");
-
-const _express = require("express");
-const { User, Team, UserTeam, _WorkLog } = require("../models");
+const express = require("express");
+const { User, Team, UserTeam } = require("../models");
 const { Op } = require("sequelize");
 const {
   authenticateToken,
@@ -11,12 +9,26 @@ const {
   requireUserAccess,
   logRequestInfo,
 } = require("../middleware/auth");
-const _AuditLogger = require("../utils/auditLogger");
+const AuditLogger = require("../utils/auditLogger");
 const { sendTelegramMessage } = require("../utils/sendTelegramMessage");
-const _crypto = require("crypto");
-const _bcrypt = require("bcrypt");
+const crypto = require("crypto");
+const bcrypt = require("bcrypt");
+const { info: _info, error: _error, warn: _warn, debug: _debug } = require("../utils/logger");
 
 const router = express.Router();
+
+const HTTP_STATUS_CODES = {
+  BAD_REQUEST: 400,
+  UNAUTHORIZED: 401,
+  FORBIDDEN: 403,
+  NOT_FOUND: 404,
+  INTERNAL_SERVER_ERROR: 500,
+};
+const LIMITS = {
+  DEFAULT_PAGE_SIZE: 20,
+  MAX_PAGE_SIZE: 100,
+  MAX_PAGE_SIZE0: 1000,
+};
 
 // Применяем middleware ко всем роутам
 router.use(logRequestInfo);

@@ -1,8 +1,15 @@
 "use strict";
 
-const { _info, _error, _warn, _debug } = require("./logger");
+const { info: _info, error: _error, warn: _warn, debug: _debug } = require("./logger");
 
-const { _sendTelegramMessage } = require("./sendTelegramMessage");
+const { sendTelegramMessage: _sendTelegramMessage } = require("./sendTelegramMessage");
+
+const { LIMITS } = require("../constants");
+
+const REMINDER_THRESHOLDS = {
+  LATE_ARRIVAL: 30, // минут после 9:00
+  EARLY_LEAVE: 60,  // минут до 18:00
+};
 
 /**
  * Отправляет утреннее напоминание о приходе на работу
@@ -125,9 +132,9 @@ async function sendManagerDailyStats(managerTelegramId, stats) {
 📈 Процент завершения: ${completionRate}%
 
 ${
-  completionRate >= 90
+  completionRate >= REMINDER_THRESHOLDS.LATE_ARRIVAL
     ? "🎉 Отличные результаты!"
-    : completionRate >= 70
+    : completionRate >= REMINDER_THRESHOLDS.EARLY_LEAVE
       ? "👍 Хорошая работа команды!"
       : "⚠️ Есть над чем поработать"
 }

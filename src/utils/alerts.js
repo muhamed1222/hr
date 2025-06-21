@@ -1,6 +1,6 @@
 "use strict";
 
-const { _info, _error, _warn, _debug } = require("./logger");
+const { info: _info, error: _error, warn: _warn, debug: _debug } = require("./logger");
 
 /**
  * Система алертов и уведомлений
@@ -8,7 +8,8 @@ const { _info, _error, _warn, _debug } = require("./logger");
  */
 
 const { metrics } = require("./metrics");
-const { _sendTelegramMessage } = require("./sendTelegramMessage");
+const { sendTelegramMessage: _sendTelegramMessage } = require("./sendTelegramMessage");
+const { HTTP_STATUS_CODES, LIMITS } = require("../constants");
 
 // Константы для алертов
 const ALERT_THRESHOLDS = {

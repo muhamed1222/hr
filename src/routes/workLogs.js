@@ -1,12 +1,12 @@
 "use strict";
 
-const { _info, _warn, _debug } = require("../utils/logger");
+const { info: _info, warn: _warn, debug: _debug } = require("../utils/logger");
 
-const _express = require("express");
+const express = require("express");
 const { WorkLog, User } = require("../models");
 const { Op } = require("sequelize");
-const _moment = require("moment");
-const { _notifyWorkLogEdited } = require("../utils/sendTelegramMessage");
+const moment = require("moment");
+const { notifyWorkLogEdited: _notifyWorkLogEdited } = require("../utils/sendTelegramMessage");
 
 const router = express.Router();
 
@@ -431,7 +431,7 @@ function calculateWorkTime(arrivedAt, leftAt, lunchStart, lunchEnd) {
 
   const arrival = moment(arrivedAt, "HH:mm:ss");
   const departure = moment(leftAt, "HH:mm:ss");
-  const _totalMinutes = departure.diff(arrival, "minutes");
+  let totalMinutes = departure.diff(arrival, "minutes");
 
   // Вычитаем время обеда
   if (lunchStart && lunchEnd) {

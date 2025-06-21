@@ -1,6 +1,6 @@
 "use strict";
 
-const { _info, _error, _warn, _debug } = require("../utils/logger");
+const { info: _info, error: _error, warn: _warn, debug: _debug } = require("../utils/logger");
 
 /**
  * Конфигурация SSL/HTTPS
@@ -8,9 +8,9 @@ const { _info, _error, _warn, _debug } = require("../utils/logger");
  * Для продакшена необходимо использовать реальные сертификаты
  */
 
-const _fs = require("fs");
-const _path = require("path");
-const _forge = require("node-forge");
+const fs = require("fs");
+const path = require("path");
+const forge = require("node-forge");
 
 // Пути к сертификатам
 const certPath = path.join(__dirname, "../../certs");
@@ -58,11 +58,11 @@ const generateSelfSignedCert = () => {
 
   try {
     // Генерируем приватный ключ
-    execSync(`openssl genrsa -out "${keyFile}" LIMITS.DEFAULT_PAGE_SIZE48`, { stdio: "inherit" });
+    execSync(`openssl genrsa -out "${keyFile}" 2048`, { stdio: "inherit" });
 
     // Генерируем самоподписанный сертификат
     execSync(
-      `openssl req -new -xLIMITS.DEFAULT_PAGE_SIZE9 -key "${keyFile}" -out "${certFile}" -days 365 -subj "/C=RU/ST=Development/L=Development/O=HR System/CN=localhost"`,
+      `openssl req -new -x509 -key "${keyFile}" -out "${certFile}" -days 365 -subj "/C=RU/ST=Development/L=Development/O=HR System/CN=localhost"`,
       { stdio: "inherit" },
     );
 

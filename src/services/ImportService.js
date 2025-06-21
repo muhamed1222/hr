@@ -28,7 +28,7 @@ class ImportService {
 
       // Определяем тип файла
       const fileExtension = path.extname(filePath).toLowerCase();
-      const _userData = [];
+      let userData = [];
 
       if (fileExtension === ".csv") {
         userData = await this.parseCSV(filePath);
@@ -245,7 +245,7 @@ class ImportService {
     const hashedPassword = await bcrypt.hash(tempPassword, 10);
 
     // Обрабатываем команду
-    const _teamId = null;
+    let teamId = null;
     if (userData.team) {
       const team = await this.findOrCreateTeam(userData.team, organizationId);
       teamId = team.id;
@@ -325,7 +325,7 @@ class ImportService {
       я: "ya",
     };
 
-    const _username = name.toLowerCase();
+    let username = name.toLowerCase();
 
     // Транслитерация
     username = username.replace(/[а-яё]/g, (char) => translitMap[char] || char);
@@ -360,9 +360,9 @@ class ImportService {
 
   static generateTempPassword(length = 8) {
     const chars = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
-    const _password = "";
+    let password = "";
 
-    for (let _i = 0; i < length; i++) {
+    for (let i = 0; i < length; i++) {
       password += chars.charAt(Math.floor(Math.random() * chars.length));
     }
 
@@ -370,7 +370,7 @@ class ImportService {
   }
 
   static async findOrCreateTeam(teamName, organizationId) {
-    const _team = await Team.findOne({
+    let team = await Team.findOne({
       where: {
         name: teamName,
         organizationId,
@@ -462,7 +462,7 @@ class ImportService {
 
     try {
       const fileExtension = path.extname(filePath).toLowerCase();
-      const _userData = [];
+      let userData = [];
 
       if (fileExtension === ".csv") {
         userData = await this.parseCSV(filePath);

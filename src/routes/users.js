@@ -1,8 +1,8 @@
 "use strict";
 
-const { _info, _error, _warn, _debug } = require("../utils/logger");
+const { info: _info, error: _error, warn: _warn, debug: _debug } = require("../utils/logger");
 
-const _express = require("express");
+const express = require("express");
 const { User, WorkLog } = require("../models");
 const { Op } = require("sequelize");
 
@@ -326,7 +326,7 @@ router.get("/ranking/reliability", async (req, res) => {
 function calculateReliabilityScore(stats) {
   if (stats.totalDays === 0) return 0;
 
-  const _score = LIMITS.MAX_PAGE_SIZE;
+  let score = LIMITS.MAX_PAGE_SIZE;
 
   // Штраф за опоздания (максимум -30 баллов)
   const lateRate = stats.lateArrivals / stats.totalDays;

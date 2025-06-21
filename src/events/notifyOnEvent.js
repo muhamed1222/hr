@@ -1,33 +1,26 @@
 "use strict";
 
-const { _info, _error, _warn, _debug } = require("../utils/logger");
+const { info, error } = require("../utils/logger");
 
-const { eventEmitter } = require("./eventEmitter");
-const { _notifyNewUser } = require("../notifications/notifyNewUser");
-const { _notifyMissedWorklog } = require("../notifications/notifyMissedWorklog");
-const { _notifyLogEdited } = require("../notifications/notifyLogEdited");
-const { _notifyUserPromoted } = require("../notifications/notifyUserPromoted");
-const { _notifyTeamStats } = require("../notifications/notifyTeamStats");
-
-// Импортируем все обработчики уведомлений
+const { appEvents } = require("./eventEmitter");
 const { notifyNewUser } = require("../notifications/notifyNewUser");
 const { notifyMissedWorklog } = require("../notifications/notifyMissedWorklog");
 const { notifyLogEdited } = require("../notifications/notifyLogEdited");
-const { notifyTeamStats } = require("../notifications/notifyTeamStats");
 const { notifyUserPromoted } = require("../notifications/notifyUserPromoted");
+const { notifyTeamStats } = require("../notifications/notifyTeamStats");
 
 /**
  * Инициализирует все слушатели событий
  */
 function initEventListeners() {
-  _info("Инициализация системы событий");
+  info("Инициализация системы событий");
 
   // Событие создания нового пользователя
-  eventEmitter.on("user.created", async (userData) => {
+  appEvents.on("user.created", async (userData) => {
     try {
       await notifyNewUser(userData);
     } catch (err) {
-      _error("Ошибка при обработке user.created", {
+      error("Ошибка при обработке user.created", {
         error: err.message,
         userData,
       });
@@ -35,11 +28,11 @@ function initEventListeners() {
   });
 
   // Событие пропуска рабочего лога
-  eventEmitter.on("worklog.missed", async (payload) => {
+  appEvents.on("worklog.missed", async (payload) => {
     try {
       await notifyMissedWorklog(payload);
     } catch (err) {
-      _error("Ошибка при обработке worklog.missed", {
+      error("Ошибка при обработке worklog.missed", {
         error: err.message,
         payload,
       });
@@ -47,11 +40,11 @@ function initEventListeners() {
   });
 
   // Событие редактирования лога
-  eventEmitter.on("log.edited", async (payload) => {
+  appEvents.on("log.edited", async (payload) => {
     try {
       await notifyLogEdited(payload);
     } catch (err) {
-      _error("Ошибка при обработке log.edited", { error: err.message, payload });
+      error("Ошибка при обработке log.edited", { error: err.message, payload });
     }
   });
 
