@@ -23,9 +23,9 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">100% </span>
+                <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>4/4</span>
+                <span class='fraction'>0/4</span>
             </div>
         
             
@@ -44,9 +44,9 @@
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">100% </span>
+                <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>4/4</span>
+                <span class='fraction'>0/4</span>
             </div>
         
             
@@ -61,7 +61,7 @@
             </div>
         </template>
     </div>
-    <div class='status-line high'></div>
+    <div class='status-line low'></div>
     <pre><table class="coverage">
 <tr><td class="line-count quiet"><a name='L1'></a><a href='#L1'>1</a>
 <a name='L2'></a><a href='#L2'>2</a>
@@ -133,11 +133,19 @@
 <a name='L68'></a><a href='#L68'>68</a>
 <a name='L69'></a><a href='#L69'>69</a>
 <a name='L70'></a><a href='#L70'>70</a>
-<a name='L71'></a><a href='#L71'>71</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">3x</span>
-<span class="cline-any cline-yes">3x</span>
+<a name='L71'></a><a href='#L71'>71</a>
+<a name='L72'></a><a href='#L72'>72</a>
+<a name='L73'></a><a href='#L73'>73</a>
+<a name='L74'></a><a href='#L74'>74</a>
+<a name='L75'></a><a href='#L75'>75</a>
+<a name='L76'></a><a href='#L76'>76</a>
+<a name='L77'></a><a href='#L77'>77</a>
+<a name='L78'></a><a href='#L78'>78</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -203,84 +211,97 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">3x</span></td><td class="text"><pre class="prettyprint lang-js">const { DataTypes } = require('sequelize');
-const sequelize = require('../config/database');
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">"use strict";
 &nbsp;
-const UserTeam = sequelize.define('UserTeam', {
-  id: {
-    type: DataTypes.INTEGER,
-    primaryKey: true,
-    autoIncrement: true
-  },
-  userId: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    field: 'user_id',
-    references: {
-      model: 'users',
-      key: 'id'
-    }
-  },
-  teamId: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    field: 'team_id',
-    references: {
-      model: 'teams',
-      key: 'id'
-    }
-  },
-  role: {
-    type: DataTypes.ENUM('member', 'lead', 'manager'),
-    defaultValue: 'member'
-  },
-  joinedAt: {
-    type: DataTypes.DATE,
-    defaultValue: DataTypes.NOW,
-    field: 'joined_at'
-  },
-  leftAt: {
-    type: DataTypes.DATE,
-    allowNull: true,
-    field: 'left_at'
-  },
-  status: {
-    type: DataTypes.ENUM('active', 'inactive'),
-    defaultValue: 'active'
-  },
-  createdAt: {
-    type: DataTypes.DATE,
-    defaultValue: DataTypes.NOW,
-    field: 'created_at'
-  },
-  updatedAt: {
-    type: DataTypes.DATE,
-    defaultValue: DataTypes.NOW,
-    field: 'updated_at'
-  }
-}, {
-  tableName: 'user_teams',
-  timestamps: true,
-  underscored: true,
-  indexes: [
-    {
-      unique: true,
-      fields: ['user_id', 'team_id'],
-      where: {
-        status: 'active'
-      }
-    }
-  ]
-});
+const { DataTypes } = <span class="cstat-no" title="statement not covered" >require("sequelize");</span>
+const _sequelize = <span class="cstat-no" title="statement not covered" >require("../config/database");</span>
 &nbsp;
-module.exports = UserTeam; </pre></td></tr></table></pre>
+const UserTeam = <span class="cstat-no" title="statement not covered" >sequelize.define(</span>
+  "UserTeam",
+  {
+    id: {
+      type: DataTypes.INTEGER,
+      primaryKey: true,
+      autoIncrement: true,
+    },
+    userId: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      field: "user_id",
+      references: {
+        model: "users",
+        key: "id",
+      },
+    },
+    teamId: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      field: "team_id",
+      references: {
+        model: "teams",
+        key: "id",
+      },
+    },
+    role: {
+      type: DataTypes.ENUM("member", "lead", "observer"),
+      defaultValue: "member",
+    },
+    status: {
+      type: DataTypes.ENUM("active", "inactive", "pending"),
+      defaultValue: "active",
+    },
+    joinedAt: {
+      type: DataTypes.DATE,
+      defaultValue: DataTypes.NOW,
+      field: "joined_at",
+    },
+    leftAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      field: "left_at",
+    },
+    createdAt: {
+      type: DataTypes.DATE,
+      defaultValue: DataTypes.NOW,
+      field: "created_at",
+    },
+    updatedAt: {
+      type: DataTypes.DATE,
+      defaultValue: DataTypes.NOW,
+      field: "updated_at",
+    },
+  },
+  {
+    tableName: "user_teams",
+    timestamps: true,
+    underscored: true,
+    indexes: [
+      {
+        unique: true,
+        fields: ["user_id", "team_id"],
+        where: {
+          status: "active",
+        },
+      },
+    ],
+  },
+);
+&nbsp;
+<span class="cstat-no" title="statement not covered" >module.exports = UserTeam;</span>
+&nbsp;</pre></td></tr></table></pre>
 
                 <div class='push'></div><!-- for sticky footer -->
             </div><!-- /wrapper -->
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-06-18T23:44:35.485Z
+                at 2025-06-20T21:30:51.748Z
             </div>
         <script src="../prettify.js"></script>
         <script>

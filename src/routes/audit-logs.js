@@ -1,11 +1,15 @@
-const express = require('express');
-const { AuditLog, User } = require('../models');
-const { Op } = require('sequelize');
-const { 
-  authenticateToken, 
-  requireRole, 
-  logRequestInfo 
-} = require('../middleware/auth');
+"use strict";
+
+const { _info, _error, _warn, _debug } = require("../utils/logger");
+
+const _express = require("express");
+const { AuditLog, User } = require("../models");
+const { Op } = require("sequelize");
+const {
+  authenticateToken,
+  requireRole,
+  logRequestInfo,
+} = require("../middleware/auth");
 
 const router = express.Router();
 
@@ -16,19 +20,19 @@ router.use(authenticateToken);
 /**
  * Получить аудит логи с фильтрацией
  */
-router.get('/', requireRole(['admin', 'manager']), async (req, res) => {
+router.get("/", requireRole(["admin", "manager"]), async (req, res) => {
   try {
     const {
-      adminId = '',
-      userId = '',
-      resource = '',
-      action = '',
-      startDate = '',
-      endDate = '',
+      adminId = "",
+      userId = "",
+      resource = "",
+      action = "",
+      startDate = "",
+      endDate = "",
       page = 1,
-      limit = 50,
-      sortBy = 'createdAt',
-      sortOrder = 'DESC'
+      limit = LIMITS.DEFAULT_PAGE_SIZE,
+      sortBy = "createdAt",
+      sortOrder = "DESC",
     } = req.query;
 
     const whereClause = {};
@@ -56,43 +60,45 @@ router.get('/', requireRole(['admin', 'manager']), async (req, res) => {
     // Фильтр по датам
     if (startDate && endDate) {
       whereClause.createdAt = {
-        [Op.between]: [new Date(startDate), new Date(endDate)]
+        [Op.between]: [new Date(startDate), new Date(endDate)],
       };
     } else if (startDate) {
       whereClause.createdAt = {
-        [Op.gte]: new Date(startDate)
+        [Op.gte]: new Date(startDate),
       };
     } else if (endDate) {
       whereClause.createdAt = {
-        [Op.lte]: new Date(endDate)
+        [Op.lte]: new Date(endDate),
       };
     }
 
     // Менеджеры видят только логи, связанные с их командами
-    if (req.user.role === 'manager') {
+    if (req.user.role === "manager") {
       // Получаем ID пользователей из команд менеджера
-      const { Team, UserTeam } = require('../models');
-      
+      const { Team, _UserTeam } = require("../models");
+
       const managedTeams = await Team.findAll({
         where: { managerId: req.user.id },
-        include: [{
-          model: User,
-          as: 'members',
-          through: { where: { status: 'active' } },
-          attributes: ['id']
-        }]
+        include: [
+          {
+            model: User,
+            as: "members",
+            through: { where: { status: "active" } },
+            attributes: ["id"],
+          },
+        ],
       });
 
-      const managedUserIds = managedTeams.flatMap(team => 
-        team.members.map(member => member.id)
+      const managedUserIds = managedTeams.flatMap((team) =>
+        team.members.map((member) => member.id),
       );
-      
+
       // Добавляем себя в список
       managedUserIds.push(req.user.id);
 
       whereClause[Op.or] = [
         { userId: { [Op.in]: managedUserIds } },
-        { adminId: req.user.id }
+        { adminId: req.user.id },
       ];
     }
 
@@ -103,20 +109,20 @@ router.get('/', requireRole(['admin', 'manager']), async (req, res) => {
       include: [
         {
           model: User,
-          as: 'admin',
-          attributes: ['id', 'name', 'username'],
-          required: false
+          as: "admin",
+          attributes: ["id", "name", "username"],
+          required: false,
         },
         {
           model: User,
-          as: 'user',
-          attributes: ['id', 'name', 'username'],
-          required: false
-        }
+          as: "user",
+          attributes: ["id", "name", "username"],
+          required: false,
+        },
       ],
       order: [[sortBy, sortOrder.toUpperCase()]],
       limit: parseInt(limit),
-      offset: offset
+      offset: offset,
     });
 
     res.json({
@@ -126,15 +132,14 @@ router.get('/', requireRole(['admin', 'manager']), async (req, res) => {
         page: parseInt(page),
         limit: parseInt(limit),
         total: count,
-        pages: Math.ceil(count / limit)
-      }
+        pages: Math.ceil(count / limit),
+      },
     });
-
   } catch (error) {
-    console.error('Ошибка получения аудит логов:', error);
-    res.status(500).json({
+    _error("Ошибка получения аудит логов:", error);
+    res.status(LIMITS.DEFAULT_PAGE_SIZE0).json({
       success: false,
-      message: 'Ошибка получения аудит логов'
+      message: "Ошибка получения аудит логов",
     });
   }
 });
@@ -142,31 +147,42 @@ router.get('/', requireRole(['admin', 'manager']), async (req, res) => {
 /**
  * Получить статистику аудит логов
  */
-router.get('/stats', requireRole(['admin']), async (req, res) => {
+router.get("/stats", requireRole(["admin"]), async (req, res) => {
   try {
-    const { period = '7d' } = req.query;
+    const { period = "7d" } = req.query;
 
     let startDate;
     const endDate = new Date();
 
     switch (period) {
-      case '1d':
-        startDate = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      case "1d":
+        startDate = new Date(
+          Date.now() - 24 * 60 * TIME_CONSTANTS.MINUTE * LIMITS.MAX_PAGE_SIZE0,
+        );
         break;
-      case '7d':
-        startDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      case "7d":
+        startDate = new Date(
+          Date.now() -
+            7 * 24 * 60 * TIME_CONSTANTS.MINUTE * LIMITS.MAX_PAGE_SIZE0,
+        );
         break;
-      case '30d':
-        startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      case "30d":
+        startDate = new Date(
+          Date.now() -
+            30 * 24 * 60 * TIME_CONSTANTS.MINUTE * LIMITS.MAX_PAGE_SIZE0,
+        );
         break;
       default:
-        startDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+        startDate = new Date(
+          Date.now() -
+            7 * 24 * 60 * TIME_CONSTANTS.MINUTE * LIMITS.MAX_PAGE_SIZE0,
+        );
     }
 
     const whereClause = {
       createdAt: {
-        [Op.between]: [startDate, endDate]
-      }
+        [Op.between]: [startDate, endDate],
+      },
     };
 
     const [
@@ -174,7 +190,7 @@ router.get('/stats', requireRole(['admin']), async (req, res) => {
       actionsByType,
       actionsByResource,
       topAdmins,
-      recentActions
+      recentActions,
     ] = await Promise.all([
       // Общее количество действий
       AuditLog.count({ where: whereClause }),
@@ -183,42 +199,53 @@ router.get('/stats', requireRole(['admin']), async (req, res) => {
       AuditLog.findAll({
         where: whereClause,
         attributes: [
-          'action',
-          [AuditLog.sequelize.fn('COUNT', AuditLog.sequelize.col('action')), 'count']
+          "action",
+          [
+            AuditLog.sequelize.fn("COUNT", AuditLog.sequelize.col("action")),
+            "count",
+          ],
         ],
-        group: ['action'],
-        order: [[AuditLog.sequelize.literal('count'), 'DESC']],
+        group: ["action"],
+        order: [[AuditLog.sequelize.literal("count"), "DESC"]],
         limit: 10,
-        raw: true
+        raw: true,
       }),
 
       // Группировка по ресурсам
       AuditLog.findAll({
         where: whereClause,
         attributes: [
-          'resource',
-          [AuditLog.sequelize.fn('COUNT', AuditLog.sequelize.col('resource')), 'count']
+          "resource",
+          [
+            AuditLog.sequelize.fn("COUNT", AuditLog.sequelize.col("resource")),
+            "count",
+          ],
         ],
-        group: ['resource'],
-        order: [[AuditLog.sequelize.literal('count'), 'DESC']],
-        raw: true
+        group: ["resource"],
+        order: [[AuditLog.sequelize.literal("count"), "DESC"]],
+        raw: true,
       }),
 
       // Топ активных администраторов
       AuditLog.findAll({
         where: whereClause,
         attributes: [
-          'adminId',
-          [AuditLog.sequelize.fn('COUNT', AuditLog.sequelize.col('adminId')), 'count']
+          "adminId",
+          [
+            AuditLog.sequelize.fn("COUNT", AuditLog.sequelize.col("adminId")),
+            "count",
+          ],
         ],
-        include: [{
-          model: User,
-          as: 'admin',
-          attributes: ['name', 'username']
-        }],
-        group: ['adminId', 'admin.id'],
-        order: [[AuditLog.sequelize.literal('count'), 'DESC']],
-        limit: 10
+        include: [
+          {
+            model: User,
+            as: "admin",
+            attributes: ["name", "username"],
+          },
+        ],
+        group: ["adminId", "admin.id"],
+        order: [[AuditLog.sequelize.literal("count"), "DESC"]],
+        limit: 10,
       }),
 
       // Последние 10 действий
@@ -227,19 +254,19 @@ router.get('/stats', requireRole(['admin']), async (req, res) => {
         include: [
           {
             model: User,
-            as: 'admin',
-            attributes: ['name', 'username']
+            as: "admin",
+            attributes: ["name", "username"],
           },
           {
             model: User,
-            as: 'user',
-            attributes: ['name', 'username'],
-            required: false
-          }
+            as: "user",
+            attributes: ["name", "username"],
+            required: false,
+          },
         ],
-        order: [['createdAt', 'DESC']],
-        limit: 10
-      })
+        order: [["createdAt", "DESC"]],
+        limit: 10,
+      }),
     ]);
 
     res.json({
@@ -247,29 +274,28 @@ router.get('/stats', requireRole(['admin']), async (req, res) => {
       data: {
         totalActions,
         period,
-        actionsByType: actionsByType.map(item => ({
+        actionsByType: actionsByType.map((item) => ({
           action: item.action,
-          count: parseInt(item.count)
+          count: parseInt(item.count),
         })),
-        actionsByResource: actionsByResource.map(item => ({
+        actionsByResource: actionsByResource.map((item) => ({
           resource: item.resource,
-          count: parseInt(item.count)
+          count: parseInt(item.count),
         })),
-        topAdmins: topAdmins.map(item => ({
+        topAdmins: topAdmins.map((item) => ({
           adminId: item.adminId,
-          name: item.admin?.name || 'Unknown',
-          username: item.admin?.username || 'unknown',
-          count: parseInt(item.getDataValue('count'))
+          name: item.admin?.name || "Unknown",
+          username: item.admin?.username || "unknown",
+          count: parseInt(item.getDataValue("count")),
         })),
-        recentActions
-      }
+        recentActions,
+      },
     });
-
   } catch (error) {
-    console.error('Ошибка получения статистики аудит логов:', error);
-    res.status(500).json({
+    _error("Ошибка получения статистики аудит логов:", error);
+    res.status(LIMITS.DEFAULT_PAGE_SIZE0).json({
       success: false,
-      message: 'Ошибка получения статистики'
+      message: "Ошибка получения статистики",
     });
   }
 });
@@ -277,7 +303,7 @@ router.get('/stats', requireRole(['admin']), async (req, res) => {
 /**
  * Получить детали конкретного аудит лога
  */
-router.get('/:id', requireRole(['admin', 'manager']), async (req, res) => {
+router.get("/:id", requireRole(["admin", "manager"]), async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -285,63 +311,66 @@ router.get('/:id', requireRole(['admin', 'manager']), async (req, res) => {
       include: [
         {
           model: User,
-          as: 'admin',
-          attributes: ['id', 'name', 'username', 'role']
+          as: "admin",
+          attributes: ["id", "name", "username", "role"],
         },
         {
           model: User,
-          as: 'user',
-          attributes: ['id', 'name', 'username', 'role'],
-          required: false
-        }
-      ]
+          as: "user",
+          attributes: ["id", "name", "username", "role"],
+          required: false,
+        },
+      ],
     });
 
     if (!log) {
-      return res.status(404).json({
+      return res.status(HTTP_STATUS_CODES.NOT_FOUND).json({
         success: false,
-        message: 'Аудит лог не найден'
+        message: "Аудит лог не найден",
       });
     }
 
     // Менеджеры могут видеть только логи, связанные с их командами
-    if (req.user.role === 'manager') {
-      const { Team } = require('../models');
-      
+    if (req.user.role === "manager") {
+      const { Team } = require("../models");
+
       const managedTeams = await Team.findAll({
         where: { managerId: req.user.id },
-        include: [{
-          model: User,
-          as: 'members',
-          through: { where: { status: 'active' } },
-          attributes: ['id']
-        }]
+        include: [
+          {
+            model: User,
+            as: "members",
+            through: { where: { status: "active" } },
+            attributes: ["id"],
+          },
+        ],
       });
 
-      const managedUserIds = managedTeams.flatMap(team => 
-        team.members.map(member => member.id)
+      const managedUserIds = managedTeams.flatMap((team) =>
+        team.members.map((member) => member.id),
       );
       managedUserIds.push(req.user.id);
 
-      if (log.adminId !== req.user.id && 
-          (!log.userId || !managedUserIds.includes(log.userId))) {
-        return res.status(403).json({
+      if (
+        log.adminId !== req.user.id &&
+        (!log.userId || !managedUserIds.includes(log.userId))
+      ) {
+        return res.status(HTTP_STATUS_CODES.FORBIDDEN).json({
           success: false,
-          message: 'Недостаточно прав для просмотра этого лога'
+          message: "Недостаточно прав для просмотра этого лога",
         });
       }
     }
 
     res.json({
       success: true,
-      data: log
+      data: log,
     });
-
   } catch (error) {
-    console.error('Ошибка получения аудит лога:', error);
-    res.status(500).json({
+    _error("Ошибка получения аудит лога:", error);
+    res.status(LIMITS.DEFAULT_PAGE_SIZE0).json({
       success: false,
-      message: 'Ошибка получения аудит лога'
+      message: "Ошибка получения аудит лога",
     });
   }
 });
@@ -349,117 +378,123 @@ router.get('/:id', requireRole(['admin', 'manager']), async (req, res) => {
 /**
  * Получить доступные фильтры
  */
-router.get('/filters/options', requireRole(['admin', 'manager']), async (req, res) => {
-  try {
-    const whereClause = {};
+router.get(
+  "/filters/options",
+  requireRole(["admin", "manager"]),
+  async (req, res) => {
+    try {
+      const whereClause = {};
 
-    // Менеджеры видят только данные своих команд
-    if (req.user.role === 'manager') {
-      const { Team } = require('../models');
-      
-      const managedTeams = await Team.findAll({
-        where: { managerId: req.user.id },
-        include: [{
-          model: User,
-          as: 'members',
-          through: { where: { status: 'active' } },
-          attributes: ['id']
-        }]
-      });
+      // Менеджеры видят только данные своих команд
+      if (req.user.role === "manager") {
+        const { Team } = require("../models");
 
-      const managedUserIds = managedTeams.flatMap(team => 
-        team.members.map(member => member.id)
-      );
-      managedUserIds.push(req.user.id);
+        const managedTeams = await Team.findAll({
+          where: { managerId: req.user.id },
+          include: [
+            {
+              model: User,
+              as: "members",
+              through: { where: { status: "active" } },
+              attributes: ["id"],
+            },
+          ],
+        });
 
-      whereClause[Op.or] = [
-        { userId: { [Op.in]: managedUserIds } },
-        { adminId: req.user.id }
-      ];
-    }
+        const managedUserIds = managedTeams.flatMap((team) =>
+          team.members.map((member) => member.id),
+        );
+        managedUserIds.push(req.user.id);
 
-    const [resources, actions, admins, users] = await Promise.all([
-      // Доступные ресурсы
-      AuditLog.findAll({
-        where: whereClause,
-        attributes: ['resource'],
-        group: ['resource'],
-        order: [['resource', 'ASC']],
-        raw: true
-      }),
-
-      // Доступные действия
-      AuditLog.findAll({
-        where: whereClause,
-        attributes: ['action'],
-        group: ['action'],
-        order: [['action', 'ASC']],
-        raw: true
-      }),
-
-      // Администраторы
-      AuditLog.findAll({
-        where: whereClause,
-        attributes: ['adminId'],
-        include: [{
-          model: User,
-          as: 'admin',
-          attributes: ['id', 'name', 'username']
-        }],
-        group: ['adminId', 'admin.id'],
-        order: [['admin', 'name', 'ASC']]
-      }),
-
-      // Пользователи
-      AuditLog.findAll({
-        where: { ...whereClause, userId: { [Op.not]: null } },
-        attributes: ['userId'],
-        include: [{
-          model: User,
-          as: 'user',
-          attributes: ['id', 'name', 'username']
-        }],
-        group: ['userId', 'user.id'],
-        order: [['user', 'name', 'ASC']]
-      })
-    ]);
-
-    res.json({
-      success: true,
-      data: {
-        resources: resources.map(r => r.resource),
-        actions: actions.map(a => a.action),
-        admins: admins.map(a => ({
-          id: a.adminId,
-          name: a.admin?.name || 'Unknown',
-          username: a.admin?.username || 'unknown'
-        })),
-        users: users.map(u => ({
-          id: u.userId,
-          name: u.user?.name || 'Unknown',
-          username: u.user?.username || 'unknown'
-        }))
+        whereClause[Op.or] = [
+          { userId: { [Op.in]: managedUserIds } },
+          { adminId: req.user.id },
+        ];
       }
-    });
 
-  } catch (error) {
-    console.error('Ошибка получения фильтров:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Ошибка получения фильтров'
-    });
-  }
-});
+      const [resources, actions, admins, users] = await Promise.all([
+        // Доступные ресурсы
+        AuditLog.findAll({
+          where: whereClause,
+          attributes: ["resource"],
+          group: ["resource"],
+          order: [["resource", "ASC"]],
+          raw: true,
+        }),
+
+        // Доступные действия
+        AuditLog.findAll({
+          where: whereClause,
+          attributes: ["action"],
+          group: ["action"],
+          order: [["action", "ASC"]],
+          raw: true,
+        }),
+
+        // Администраторы
+        AuditLog.findAll({
+          where: whereClause,
+          attributes: ["adminId"],
+          include: [
+            {
+              model: User,
+              as: "admin",
+              attributes: ["id", "name", "username"],
+            },
+          ],
+          group: ["adminId", "admin.id"],
+          order: [["admin", "name", "ASC"]],
+        }),
+
+        // Пользователи
+        AuditLog.findAll({
+          where: { ...whereClause, userId: { [Op.not]: null } },
+          attributes: ["userId"],
+          include: [
+            {
+              model: User,
+              as: "user",
+              attributes: ["id", "name", "username"],
+            },
+          ],
+          group: ["userId", "user.id"],
+          order: [["user", "name", "ASC"]],
+        }),
+      ]);
+
+      res.json({
+        success: true,
+        data: {
+          resources: resources.map((r) => r.resource),
+          actions: actions.map((a) => a.action),
+          admins: admins.map((a) => ({
+            id: a.adminId,
+            name: a.admin?.name || "Unknown",
+            username: a.admin?.username || "unknown",
+          })),
+          users: users.map((u) => ({
+            id: u.userId,
+            name: u.user?.name || "Unknown",
+            username: u.user?.username || "unknown",
+          })),
+        },
+      });
+    } catch (error) {
+      _error("Ошибка получения фильтров:", error);
+      res.status(LIMITS.DEFAULT_PAGE_SIZE0).json({
+        success: false,
+        message: "Ошибка получения фильтров",
+      });
+    }
+  },
+);
 
 /**
  * Экспорт аудит логов
  */
-router.post('/export', requireRole(['admin']), async (req, res) => {
+router.post("/export", requireRole(["admin"]), async (req, res) => {
   try {
-    const {
-      format = 'json',
-      filters = {}
-    } = req.body;
+    const { format = "json", filters = {} } = req.body;
 
     const whereClause = {};
 
@@ -467,10 +502,11 @@ router.post('/export', requireRole(['admin']), async (req, res) => {
     if (filters.adminId) whereClause.adminId = filters.adminId;
     if (filters.userId) whereClause.userId = filters.userId;
     if (filters.resource) whereClause.resource = filters.resource;
-    if (filters.action) whereClause.action = { [Op.like]: `%${filters.action}%` };
+    if (filters.action)
+      whereClause.action = { [Op.like]: `%${filters.action}%` };
     if (filters.startDate && filters.endDate) {
       whereClause.createdAt = {
-        [Op.between]: [new Date(filters.startDate), new Date(filters.endDate)]
+        [Op.between]: [new Date(filters.startDate), new Date(filters.endDate)],
       };
     }
 
@@ -479,54 +515,63 @@ router.post('/export', requireRole(['admin']), async (req, res) => {
       include: [
         {
           model: User,
-          as: 'admin',
-          attributes: ['name', 'username']
+          as: "admin",
+          attributes: ["name", "username"],
         },
         {
           model: User,
-          as: 'user',
-          attributes: ['name', 'username'],
-          required: false
-        }
+          as: "user",
+          attributes: ["name", "username"],
+          required: false,
+        },
       ],
-      order: [['createdAt', 'DESC']],
-      limit: 10000 // Ограничиваем экспорт
+      order: [["createdAt", "DESC"]],
+      limit: LIMITS.MAX_PAGE_SIZE00, // Ограничиваем экспорт
     });
 
     // Логируем экспорт
-    const AuditLogger = require('../utils/auditLogger');
+    const _AuditLogger = require("../utils/auditLogger");
     await AuditLogger.logReportExported(
       req.user.id,
       `audit_logs_${format}`,
       { filters, count: logs.length },
-      req
+      req,
     );
 
-    if (format === 'csv') {
+    if (format === "csv") {
       // Конвертируем в CSV
       const csvHeaders = [
-        'ID', 'Дата', 'Администратор', 'Пользователь', 'Действие', 
-        'Ресурс', 'Описание', 'IP'
+        "ID",
+        "Дата",
+        "Администратор",
+        "Пользователь",
+        "Действие",
+        "Ресурс",
+        "Описание",
+        "IP",
       ];
-      
-      const csvData = logs.map(log => [
+
+      const csvData = logs.map((log) => [
         log.id,
         log.createdAt.toISOString(),
-        log.admin ? `${log.admin.name} (${log.admin.username})` : '',
-        log.user ? `${log.user.name} (${log.user.username})` : '',
+        log.admin ? `${log.admin.name} (${log.admin.username})` : "",
+        log.user ? `${log.user.name} (${log.user.username})` : "",
         log.action,
         log.resource,
         log.description,
-        log.ipAddress || ''
+        log.ipAddress || "",
       ]);
 
       const csv = [csvHeaders, ...csvData]
-        .map(row => row.map(field => `"${field}"`).join(','))
-        .join('\n');
+        .map((row) => row.map((field) => `"${field}"`).join(","))
+        .join("\n");
 
-      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-      res.setHeader('Content-Disposition', `attachment; filename="audit_logs_${Date.now()}.csv"`);
-      return res.send('\ufeff' + csv); // BOM для правильного отображения в Excel
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="audit_logs_${Date.now()}.csv"`,
+      );
+      return res.send("\ufeff" + csv); // BOM для правильного отображения в Excel
     }
 
     // JSON формат по умолчанию
@@ -540,18 +585,17 @@ router.post('/export', requireRole(['admin']), async (req, res) => {
         exportedBy: {
           id: req.user.id,
           name: req.user.name,
-          username: req.user.username
-        }
-      }
+          username: req.user.username,
+        },
+      },
     });
-
   } catch (error) {
-    console.error('Ошибка экспорта аудит логов:', error);
-    res.status(500).json({
+    _error("Ошибка экспорта аудит логов:", error);
+    res.status(LIMITS.DEFAULT_PAGE_SIZE0).json({
       success: false,
-      message: 'Ошибка экспорта аудит логов'
+      message: "Ошибка экспорта аудит логов",
     });
   }
 });
 
-module.exports = router; 
+module.exports = router;

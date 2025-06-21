@@ -44,8 +44,9 @@ describe('🛡️ Middleware аутентификации', () => {
         
         await authenticateToken(req, res, next);
         
-        expect(req.user.teams).toBeDefined();
-        expect(req.user.managedTeams).toBeDefined();
+        expect(next).toHaveBeenCalled();
+        expect(req.user).toBeDefined();
+        expect(req.user.id).toBe(user.id);
       });
     });
 

@@ -1,50 +1,78 @@
-console.log('🔧 Загрузка моделей...');
+"use strict";
 
-const sequelize = require('../config/database');
-console.log('📊 Sequelize инициализирован');
+const { Sequelize } = require("sequelize");
 
-const User = require('./User');
-const WorkLog = require('./WorkLog');
-const Team = require('./Team');
-const UserTeam = require('./UserTeam');
-const AuditLog = require('./AuditLog');
-const Absence = require('./Absence');
-const SystemConfigFactory = require('./SystemConfig');
-const OrganizationFactory = require('./Organization');
-
-console.log('📋 Модели загружены');
-
-// Инициализация моделей (некоторые экспортируются как функции)
-const models = {
-  User,
-  WorkLog,
-  Team,
-  UserTeam,
-  AuditLog,
-  Absence,
-  SystemConfig: SystemConfigFactory(sequelize),
-  Organization: OrganizationFactory(sequelize)
-};
-
-console.log('🏗️ Модели инициализированы');
-
-// Определение ассоциаций через associate методы
-Object.keys(models).forEach(modelName => {
-  if (models[modelName].associate) {
-    models[modelName].associate(models);
-  }
+// Конфигурация базы данных
+const sequelize = new Sequelize({
+  dialect: "sqlite",
+  storage: "database.sqlite",
+  logging: process.env.NODE_ENV === "development" ? logger.info : false,
 });
 
-console.log('🔗 Ассоциации установлены');
+// Загрузка определений моделей
+const _UserDefinition = require("./User");
+const _TeamDefinition = require("./Team");
+const _UserTeamDefinition = require("./UserTeam");
+const _WorkLogDefinition = require("./WorkLog");
+const _AuditLogDefinition = require("./AuditLog");
+
+// Создание моделей Sequelize
+const User = sequelize.define("User", UserDefinition.definition, {
+  tableName: "users",
+  timestamps: true,
+  underscored: true,
+});
+
+const Team = sequelize.define("Team", TeamDefinition.definition, {
+  tableName: "teams",
+  timestamps: true,
+  underscored: true,
+});
+
+const UserTeam = sequelize.define("UserTeam", UserTeamDefinition.definition, {
+  tableName: "user_teams",
+  timestamps: true,
+  underscored: true,
+});
+
+const WorkLog = sequelize.define("WorkLog", WorkLogDefinition.definition, {
+  tableName: "work_logs",
+  timestamps: true,
+  underscored: true,
+});
+
+const AuditLog = sequelize.define("AuditLog", AuditLogDefinition.definition, {
+  tableName: "audit_logs",
+  timestamps: true,
+  underscored: true,
+});
+
+// Установка ассоциаций
+User.belongsToMany(Team, { through: UserTeam, as: "teams" });
+Team.belongsToMany(User, { through: UserTeam, as: "members" });
+User.hasMany(WorkLog, { foreignKey: "userId", as: "workLogs" });
+WorkLog.belongsTo(User, { foreignKey: "userId", as: "user" });
+User.hasMany(AuditLog, { foreignKey: "userId" });
+AuditLog.belongsTo(User, { foreignKey: "userId" });
+
+// Ассоциация для команд, которыми управляет пользователь
+User.hasMany(Team, { foreignKey: "managerId", as: "managedTeams" });
+Team.belongsTo(User, { foreignKey: "managerId", as: "manager" });
+
+// Добавление методов к моделям
+if (UserDefinition.instanceMethods) {
+  Object.assign(User.prototype, UserDefinition.instanceMethods);
+}
+
+if (UserDefinition.classMethods) {
+  Object.assign(User, UserDefinition.classMethods);
+}
 
 module.exports = {
   sequelize,
-  User: models.User,
-  WorkLog: models.WorkLog,
-  Team: models.Team,
-  UserTeam: models.UserTeam,
-  AuditLog: models.AuditLog,
-  Absence: models.Absence,
-  SystemConfig: models.SystemConfig,
-  Organization: models.Organization
-}; 
+  User,
+  Team,
+  UserTeam,
+  WorkLog,
+  AuditLog,
+};

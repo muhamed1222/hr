@@ -1,460 +1,453 @@
-const express = require('express');
+"use strict";
+
+const { _info, _error, _warn, _debug } = require("../utils/logger");
+
+const _express = require("express");
 const router = express.Router();
-const { Op, Sequelize } = require('sequelize');
-const { authenticateToken } = require('../middleware/auth');
-const { User, WorkLog, Team, UserTeam, Absence } = require('../models');
-const ExcelJS = require('exceljs');
-const PDFDocument = require('pdfkit');
+const { Op, _Sequelize } = require("sequelize");
+const { authenticateToken } = require("../middleware/auth");
+const { User, WorkLog, _Team, _UserTeam } = require("../models");
+const __ExcelJS = require("exceljs");
+const __PDFDocument = require("pdfkit");
 
 // Middleware для проверки прав
 const requireManagerOrAdmin = (req, res, next) => {
-  if (!['manager', 'admin'].includes(req.user.role)) {
-    return res.status(403).json({ error: 'Недостаточно прав' });
+  if (!["manager", "admin"].includes(req.user.role)) {
+    return res
+      .status(HTTP_STATUS_CODES.FORBIDDEN)
+      .json({ error: "Недостаточно прав" });
   }
   next();
 };
 
-// Получить данные для тепловой карты активности
-router.get('/activity-heatmap', authenticateToken, requireManagerOrAdmin, async (req, res) => {
+// Основной маршрут аналитики
+router.get("/", authenticateToken, requireManagerOrAdmin, async (req, res) => {
   try {
-    const { startDate, endDate, teamId, userId } = req.query;
+    const { startDate, endDate, _userId } = req.query;
 
-    const whereClause = {};
-    if (startDate && endDate) {
-      whereClause.date = {
-        [Op.between]: [new Date(startDate), new Date(endDate)]
-      };
+    // Базовые параметры
+    const start =
+      startDate ||
+      new Date(
+        Date.now() -
+          30 * 24 * 60 * TIME_CONSTANTS.MINUTE * LIMITS.MAX_PAGE_SIZE0,
+      )
+        .toISOString()
+        .split("T")[0];
+    const end = endDate || new Date().toISOString().split("T")[0];
+
+    // Получаем данные о работе
+    const workLogsQuery = {
+      where: {
+        workDate: { [Op.between]: [start, end] },
+      },
+      include: [
+        {
+          model: User,
+          as: "user",
+          attributes: ["id", "name", "username", "role"],
+        },
+      ],
+    };
+
+    if (_userId) {
+      workLogsQuery.where.userId = _userId;
     }
 
-    const userWhere = {};
-    if (userId) userWhere.id = userId;
-    if (teamId) {
-      const teamUsers = await UserTeam.findAll({
-        where: { teamId },
-        attributes: ['userId']
-      });
-      userWhere.id = { [Op.in]: teamUsers.map(ut => ut.userId) };
-    }
+    const workLogs = await WorkLog.findAll(workLogsQuery);
 
-    const workLogs = await WorkLog.findAll({
-      where: whereClause,
-      include: [{
-        model: User,
-        where: userWhere,
-        attributes: ['id', 'name', 'username']
-      }],
-      attributes: ['startTime', 'endTime', 'date', 'userId']
+    // Рассчитываем статистику
+    const totalWorkLogs = workLogs.length;
+    const totalMinutes = workLogs.reduce(
+      (sum, log) => sum + (log.totalMinutes || 0),
+      0,
+    );
+    const averageMinutes = totalWorkLogs > 0 ? totalMinutes / totalWorkLogs : 0;
+
+    // Статистика по режимам работы
+    const workModes = workLogs.reduce((acc, log) => {
+      acc[log.workMode] = (acc[log.workMode] || 0) + 1;
+      return acc;
+    }, {});
+
+    res.json({
+      success: true,
+      data: {
+        period: { startDate: start, endDate: end },
+        summary: {
+          totalWorkLogs,
+          totalMinutes,
+          averageMinutes: Math.round(averageMinutes),
+          averageHours:
+            Math.round((averageMinutes / 60) * LIMITS.MAX_PAGE_SIZE) /
+            LIMITS.MAX_PAGE_SIZE,
+        },
+        workModes,
+        workLogs: workLogs.slice(0, LIMITS.MAX_PAGE_SIZE), // Ограничиваем количество записей
+      },
     });
+  } catch (error) {
+    _error("Ошибка аналитики:", error);
+    res.status(LIMITS.DEFAULT_PAGE_SIZE0).json({
+      success: false,
+      message: "Ошибка получения аналитики",
+    });
+  }
+});
 
-    // Группируем данные по дням недели и часам
-    const heatmapData = [];
-    const days = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
-    
-    workLogs.forEach(log => {
-      if (log.startTime) {
-        const date = new Date(log.date);
-        const dayIndex = (date.getDay() + 6) % 7; // Конвертируем в 0=Пн, 6=Вс
-        const day = days[dayIndex];
-        
-        const startHour = parseInt(log.startTime.split(':')[0]);
-        const endHour = log.endTime ? parseInt(log.endTime.split(':')[0]) : startHour + 8;
-        
-        // Добавляем активность для каждого часа работы
-        for (let hour = startHour; hour <= Math.min(endHour, 23); hour++) {
-          heatmapData.push({
-            day,
-            hour,
-            activity: 1,
-            date: log.date,
-            userId: log.userId
+// Рейтинг надежности
+router.get(
+  "/reliability-ranking",
+  authenticateToken,
+  requireManagerOrAdmin,
+  async (req, res) => {
+    try {
+      const { startDate, endDate, limit = 10 } = req.query;
+
+      const start =
+        startDate ||
+        new Date(
+          Date.now() -
+            30 * 24 * 60 * TIME_CONSTANTS.MINUTE * LIMITS.MAX_PAGE_SIZE0,
+        )
+          .toISOString()
+          .split("T")[0];
+      const end = endDate || new Date().toISOString().split("T")[0];
+
+      // Получаем всех пользователей
+      const users = await User.findAll({
+        where: { status: "active" },
+        attributes: ["id", "name", "username", "role"],
+      });
+
+      // Рассчитываем надежность для каждого пользователя
+      const reliabilityData = [];
+
+      for (const user of users) {
+        const userWorkLogs = await WorkLog.findAll({
+          where: {
+            userId: user.id,
+            workDate: { [Op.between]: [start, end] },
+          },
+        });
+
+        if (userWorkLogs.length > 0) {
+          const totalDays = userWorkLogs.length;
+          const workedDays = userWorkLogs.filter(
+            (log) => log.workMode === "office" || log.workMode === "remote",
+          ).length;
+
+          const reliability = Math.round(
+            (workedDays / totalDays) * LIMITS.MAX_PAGE_SIZE,
+          );
+
+          reliabilityData.push({
+            user: {
+              id: user.id,
+              name: user.name,
+              username: user.username,
+              role: user.role,
+            },
+            reliabilityScore: reliability,
+            totalDays,
+            workedDays,
+            missedDays: totalDays - workedDays,
+            stats: {
+              totalDays,
+              workedDays,
+              missedDays: totalDays - workedDays,
+            },
           });
         }
       }
-    });
 
-    // Агрегируем данные
-    const aggregated = {};
-    heatmapData.forEach(item => {
-      const key = `${item.day}-${item.hour}`;
-      if (!aggregated[key]) {
-        aggregated[key] = { ...item, activity: 0 };
-      }
-      aggregated[key].activity += 1;
-    });
+      // Сортируем по надежности (убывание)
+      reliabilityData.sort((a, b) => b.reliabilityScore - a.reliabilityScore);
 
-    res.json({
-      success: true,
-      data: Object.values(aggregated)
-    });
-  } catch (error) {
-    console.error('Ошибка при получении данных тепловой карты:', error);
-    res.status(500).json({ error: 'Внутренняя ошибка сервера' });
-  }
-});
-
-// Получить продвинутые рейтинги
-router.get('/advanced-rankings', authenticateToken, requireManagerOrAdmin, async (req, res) => {
-  try {
-    const { startDate, endDate, limit = 10 } = req.query;
-
-    const dateFilter = {};
-    if (startDate && endDate) {
-      dateFilter.date = {
-        [Op.between]: [new Date(startDate), new Date(endDate)]
-      };
-    }
-
-    // Запрос для надёжности
-    const reliabilityData = await WorkLog.findAll({
-      where: dateFilter,
-      include: [{
-        model: User,
-        attributes: ['id', 'name', 'username']
-      }],
-      attributes: [
-        'userId',
-        [Sequelize.fn('COUNT', Sequelize.col('WorkLog.id')), 'totalDays'],
-        [Sequelize.fn('SUM', 
-          Sequelize.literal("CASE WHEN start_time <= '09:00' THEN 1 ELSE 0 END")
-        ), 'onTimeDays'],
-        [Sequelize.fn('AVG', 
-          Sequelize.literal("CASE WHEN end_time IS NOT NULL THEN CAST(REPLACE(work_hours, 'ч', '') AS DECIMAL) ELSE 0 END")
-        ), 'avgHours']
-      ],
-      group: ['userId', 'User.id', 'User.name', 'User.username'],
-      having: Sequelize.literal('COUNT(WorkLog.id) > 0')
-    });
-
-    // Запрос для пунктуальности (опоздания)
-    const punctualityData = await WorkLog.findAll({
-      where: {
-        ...dateFilter,
-        startTime: { [Op.gt]: '09:00' }
-      },
-      include: [{
-        model: User,
-        attributes: ['id', 'name', 'username']
-      }],
-      attributes: [
-        'userId',
-        [Sequelize.fn('COUNT', Sequelize.col('WorkLog.id')), 'lateCount']
-      ],
-      group: ['userId', 'User.id', 'User.name', 'User.username']
-    });
-
-    // Запрос для переработок
-    const overtimeData = await WorkLog.findAll({
-      where: dateFilter,
-      include: [{
-        model: User,
-        attributes: ['id', 'name', 'username']
-      }],
-      attributes: [
-        'userId',
-        [Sequelize.fn('SUM', 
-          Sequelize.literal("CASE WHEN CAST(REPLACE(work_hours, 'ч', '') AS DECIMAL) > 8 THEN CAST(REPLACE(work_hours, 'ч', '') AS DECIMAL) - 8 ELSE 0 END")
-        ), 'overtimeHours']
-      ],
-      group: ['userId', 'User.id', 'User.name', 'User.username']
-    });
-
-    // Формируем результат
-    const rankings = {
-      reliability: reliabilityData.map(item => ({
-        user: item.User,
-        score: Math.round((item.dataValues.onTimeDays / item.dataValues.totalDays) * 100),
-        details: {
-          totalDays: item.dataValues.totalDays,
-          onTimeDays: item.dataValues.onTimeDays,
-          avgHours: parseFloat(item.dataValues.avgHours || 0)
-        }
-      })).sort((a, b) => b.score - a.score).slice(0, limit),
-
-      punctuality: punctualityData.map(item => ({
-        user: item.User,
-        score: parseInt(item.dataValues.lateCount || 0),
-        details: {
-          lateCount: item.dataValues.lateCount
-        }
-      })).sort((a, b) => a.score - b.score).slice(0, limit),
-
-      overtime: overtimeData.map(item => ({
-        user: item.User,
-        score: Math.round(parseFloat(item.dataValues.overtimeHours || 0)),
-        details: {
-          overtimeHours: item.dataValues.overtimeHours
-        }
-      })).sort((a, b) => b.score - a.score).slice(0, limit),
-
-      consistency: reliabilityData.map(item => ({
-        user: item.User,
-        score: Math.round((item.dataValues.avgHours / 8) * 100),
-        details: {
-          avgHours: parseFloat(item.dataValues.avgHours || 0)
-        }
-      })).sort((a, b) => b.score - a.score).slice(0, limit)
-    };
-
-    res.json({
-      success: true,
-      data: rankings
-    });
-  } catch (error) {
-    console.error('Ошибка при получении продвинутых рейтингов:', error);
-    res.status(500).json({ error: 'Внутренняя ошибка сервера' });
-  }
-});
-
-// Получить распределение режимов работы
-router.get('/work-mode-distribution', authenticateToken, requireManagerOrAdmin, async (req, res) => {
-  try {
-    const { startDate, endDate, teamId } = req.query;
-
-    const whereClause = {};
-    if (startDate && endDate) {
-      whereClause.date = {
-        [Op.between]: [new Date(startDate), new Date(endDate)]
-      };
-    }
-
-    const userWhere = {};
-    if (teamId) {
-      const teamUsers = await UserTeam.findAll({
-        where: { teamId },
-        attributes: ['userId']
+      res.json({
+        success: true,
+        data: reliabilityData.slice(0, parseInt(limit)),
       });
-      userWhere.id = { [Op.in]: teamUsers.map(ut => ut.userId) };
+    } catch (error) {
+      _error("Ошибка рейтинга надежности:", error);
+      res.status(LIMITS.DEFAULT_PAGE_SIZE0).json({
+        success: false,
+        message: "Ошибка получения рейтинга надежности",
+      });
     }
+  },
+);
 
-    // Общее распределение
-    const overviewData = await WorkLog.findAll({
-      where: whereClause,
-      include: [{
-        model: User,
-        where: userWhere,
-        attributes: []
-      }],
-      attributes: [
-        'workMode',
-        [Sequelize.fn('COUNT', Sequelize.col('WorkLog.id')), 'count']
-      ],
-      group: ['workMode']
+// ВРЕМЕННО ОТКЛЮЧЕНО: Получить данные для тепловой карты активности
+router.get(
+  "/activity-heatmap",
+  authenticateToken,
+  requireManagerOrAdmin,
+  async (req, res) => {
+    res.status(LIMITS.DEFAULT_PAGE_SIZE3).json({
+      error: "Аналитика временно недоступна",
+      message:
+        "Функция находится в разработке и будет доступна в ближайшее время",
     });
+  },
+);
 
-    const overview = {};
-    overviewData.forEach(item => {
-      overview[item.workMode || 'office'] = parseInt(item.dataValues.count);
+// ВРЕМЕННО ОТКЛЮЧЕНО: Получить продвинутые рейтинги
+router.get(
+  "/advanced-rankings",
+  authenticateToken,
+  requireManagerOrAdmin,
+  async (req, res) => {
+    res.status(LIMITS.DEFAULT_PAGE_SIZE3).json({
+      error: "Аналитика временно недоступна",
+      message:
+        "Функция находится в разработке и будет доступна в ближайшее время",
     });
+  },
+);
 
-    // По командам
-    const teams = await Team.findAll({
-      attributes: ['id', 'name']
+// ВРЕМЕННО ОТКЛЮЧЕНО: Получить распределение режимов работы
+router.get(
+  "/work-mode-distribution",
+  authenticateToken,
+  requireManagerOrAdmin,
+  async (req, res) => {
+    res.status(LIMITS.DEFAULT_PAGE_SIZE3).json({
+      error: "Аналитика временно недоступна",
+      message:
+        "Функция находится в разработке и будет доступна в ближайшее время",
     });
+  },
+);
 
-    const teamsData = [];
-    for (const team of teams) {
-      const teamUsers = await UserTeam.findAll({
-        where: { teamId: team.id },
-        attributes: ['userId']
+// ВРЕМЕННО ОТКЛЮЧЕНО: Генерировать отчёт
+router.post(
+  "/generate-report",
+  authenticateToken,
+  requireManagerOrAdmin,
+  async (req, res) => {
+    res.status(LIMITS.DEFAULT_PAGE_SIZE3).json({
+      error: "Генерация отчётов временно недоступна",
+      message:
+        "Функция находится в разработке и будет доступна в ближайшее время",
+    });
+  },
+);
+
+// Получить аналитику работы (для WorkAnalyticsChart)
+router.get(
+  "/work-analytics",
+  authenticateToken,
+  requireManagerOrAdmin,
+  async (req, res) => {
+    try {
+      const { startDate, endDate, _userId } = req.query;
+
+      const start =
+        startDate ||
+        new Date(
+          Date.now() -
+            30 * 24 * 60 * TIME_CONSTANTS.MINUTE * LIMITS.MAX_PAGE_SIZE0,
+        )
+          .toISOString()
+          .split("T")[0];
+      const end = endDate || new Date().toISOString().split("T")[0];
+
+      // Получаем всех активных пользователей
+      const users = await User.findAll({
+        where: { status: "active" },
+        attributes: ["id", "name", "username"],
       });
 
-      if (teamUsers.length > 0) {
-        const teamWorkLogs = await WorkLog.findAll({
+      const workAnalytics = [];
+
+      for (const user of users) {
+        const userWorkLogs = await WorkLog.findAll({
           where: {
-            ...whereClause,
-            userId: { [Op.in]: teamUsers.map(ut => ut.userId) }
+            userId: user.id,
+            workDate: { [Op.between]: [start, end] },
           },
-          attributes: [
-            'workMode',
-            [Sequelize.fn('COUNT', Sequelize.col('id')), 'count']
-          ],
-          group: ['workMode']
         });
 
-        const modes = { office: 0, remote: 0, hybrid: 0 };
-        teamWorkLogs.forEach(item => {
-          modes[item.workMode || 'office'] = parseInt(item.dataValues.count);
-        });
+        if (userWorkLogs.length > 0) {
+          const totalMinutes = userWorkLogs.reduce(
+            (sum, log) => sum + (log.totalMinutes || 0),
+            0,
+          );
+          const avgMinutes = totalMinutes / userWorkLogs.length;
+          const workDays = userWorkLogs.length;
 
-        teamsData.push({
-          id: team.id,
-          name: team.name,
-          modes
-        });
-      }
-    }
-
-    // Тренды (по неделям за последний месяц)
-    const trends = [];
-    const now = new Date();
-    for (let i = 4; i >= 0; i--) {
-      const weekStart = new Date(now.getTime() - (i * 7 * 24 * 60 * 60 * 1000));
-      const weekEnd = new Date(weekStart.getTime() + (6 * 24 * 60 * 60 * 1000));
-
-      const weekData = await WorkLog.findAll({
-        where: {
-          date: {
-            [Op.between]: [weekStart, weekEnd]
-          }
-        },
-        include: [{
-          model: User,
-          where: userWhere,
-          attributes: []
-        }],
-        attributes: [
-          'workMode',
-          [Sequelize.fn('COUNT', Sequelize.col('WorkLog.id')), 'count']
-        ],
-        group: ['workMode']
-      });
-
-      const total = weekData.reduce((sum, item) => sum + parseInt(item.dataValues.count), 0);
-      const office = weekData.find(item => item.workMode === 'office')?.dataValues.count || 0;
-      const remote = weekData.find(item => item.workMode === 'remote')?.dataValues.count || 0;
-
-      trends.push({
-        date: weekStart.toLocaleDateString('ru-RU'),
-        office: total > 0 ? Math.round((office / total) * 100) : 0,
-        remote: total > 0 ? Math.round((remote / total) * 100) : 0
-      });
-    }
-
-    res.json({
-      success: true,
-      data: {
-        overview,
-        teams: teamsData,
-        trends,
-        trendsChange: {
-          office: trends.length > 1 ? trends[trends.length - 1].office - trends[trends.length - 2].office : 0,
-          remote: trends.length > 1 ? trends[trends.length - 1].remote - trends[trends.length - 2].remote : 0
+          workAnalytics.push({
+            userId: user.id,
+            user: {
+              id: user.id,
+              name: user.name,
+              username: user.username,
+            },
+            totalMinutes,
+            avgMinutes: Math.round(avgMinutes),
+            workDays,
+          });
         }
       }
-    });
-  } catch (error) {
-    console.error('Ошибка при получении распределения режимов работы:', error);
-    res.status(500).json({ error: 'Внутренняя ошибка сервера' });
-  }
-});
 
-// Генерировать отчёт (базовая версия)
-router.post('/generate-report', authenticateToken, requireManagerOrAdmin, async (req, res) => {
-  try {
-    const { title, dateRange, metrics, format, includeCharts, groupBy } = req.body;
+      // Сортируем по общему времени работы (убывание)
+      workAnalytics.sort((a, b) => b.totalMinutes - a.totalMinutes);
 
-    // Получаем данные в зависимости от выбранных метрик
-    const reportData = {};
-
-    if (metrics.reliability) {
-      reportData.reliability = await getReliabilityData(dateRange);
+      res.json({
+        success: true,
+        data: workAnalytics,
+      });
+    } catch (error) {
+      _error("Ошибка получения аналитики работы:", error);
+      res.status(LIMITS.DEFAULT_PAGE_SIZE0).json({
+        success: false,
+        message: "Ошибка получения аналитики работы",
+      });
     }
+  },
+);
 
-    if (metrics.punctuality) {
-      reportData.punctuality = await getPunctualityData(dateRange);
+// Получить общую статистику пользователей
+router.get(
+  "/users-overview",
+  authenticateToken,
+  requireManagerOrAdmin,
+  async (req, res) => {
+    try {
+      // Получаем всех активных пользователей
+      const totalUsers = await User.count({ where: { status: "active" } });
+
+      // Получаем пользователей, которые работают сегодня
+      const today = new Date().toISOString().split("T")[0];
+      const workingToday = await WorkLog.count({
+        where: { workDate: today },
+        include: [
+          {
+            model: User,
+            as: "user",
+            where: { status: "active" },
+          },
+        ],
+      });
+
+      // Получаем пользователей на обеде (временная заглушка)
+      const onLunch = 0;
+
+      // Получаем активных пользователей
+      const activeUsers = await User.count({
+        where: {
+          status: "active",
+          lastLogin: {
+            [Op.gte]: new Date(
+              Date.now() -
+                7 * 24 * 60 * TIME_CONSTANTS.MINUTE * LIMITS.MAX_PAGE_SIZE0,
+            ),
+          },
+        },
+      });
+
+      res.json({
+        success: true,
+        data: {
+          totalUsers,
+          activeUsers,
+          workingToday,
+          onLunch,
+        },
+      });
+    } catch (error) {
+      _error("Ошибка получения статистики пользователей:", error);
+      res.status(LIMITS.DEFAULT_PAGE_SIZE0).json({
+        success: false,
+        message: "Ошибка получения статистики пользователей",
+      });
     }
+  },
+);
 
-    if (metrics.workModes) {
-      reportData.workModes = await getWorkModeData(dateRange);
-    }
+// Получить статистику рабочих логов
+router.get(
+  "/work-logs-stats",
+  authenticateToken,
+  requireManagerOrAdmin,
+  async (req, res) => {
+    try {
+      const { startDate, endDate, _userId } = req.query;
 
-    // Для простоты пока возвращаем JSON
-    res.json({
-      success: true,
-      data: {
-        title,
-        dateRange,
-        metrics,
-        format,
-        reportData,
-        generatedAt: new Date().toISOString()
+      const start =
+        startDate ||
+        new Date(
+          Date.now() -
+            30 * 24 * 60 * TIME_CONSTANTS.MINUTE * LIMITS.MAX_PAGE_SIZE0,
+        )
+          .toISOString()
+          .split("T")[0];
+      const end = endDate || new Date().toISOString().split("T")[0];
+
+      const whereClause = {
+        workDate: { [Op.between]: [start, end] },
+      };
+
+      if (_userId) {
+        whereClause.userId = _userId;
       }
-    });
 
-  } catch (error) {
-    console.error('Ошибка при генерации отчёта:', error);
-    res.status(500).json({ error: 'Внутренняя ошибка сервера' });
-  }
-});
+      const workLogs = await WorkLog.findAll({
+        where: whereClause,
+        include: [
+          {
+            model: User,
+            as: "user",
+            attributes: ["id", "name", "username"],
+          },
+        ],
+      });
 
-// Вспомогательные функции
-async function getReliabilityData(dateRange) {
-  const reliabilityData = await WorkLog.findAll({
-    where: {
-      date: {
-        [Op.between]: [new Date(dateRange.startDate), new Date(dateRange.endDate)]
-      }
-    },
-    include: [{
-      model: User,
-      attributes: ['id', 'name', 'username']
-    }],
-    attributes: [
-      'userId',
-      [Sequelize.fn('COUNT', Sequelize.col('WorkLog.id')), 'totalDays'],
-      [Sequelize.fn('SUM', 
-        Sequelize.literal("CASE WHEN start_time <= '09:00' THEN 1 ELSE 0 END")
-      ), 'onTimeDays']
-    ],
-    group: ['userId', 'User.id', 'User.name', 'User.username'],
-    having: Sequelize.literal('COUNT(WorkLog.id) > 0')
-  });
+      // Рассчитываем статистику
+      const totalMinutes = workLogs.reduce(
+        (sum, log) => sum + (log.totalMinutes || 0),
+        0,
+      );
+      const avgReliability =
+        workLogs.length > 0
+          ? Math.round(
+              workLogs.reduce(
+                (sum, log) => sum + (log.reliabilityScore || 0),
+                0,
+              ) / workLogs.length,
+            )
+          : 0;
 
-  return reliabilityData.map(item => ({
-    user: item.User,
-    score: Math.round((item.dataValues.onTimeDays / item.dataValues.totalDays) * 100),
-    details: {
-      totalDays: item.dataValues.totalDays,
-      onTimeDays: item.dataValues.onTimeDays
+      res.json({
+        success: true,
+        data: {
+          totalMinutes,
+          avgReliability,
+          totalWorkLogs: workLogs.length,
+        },
+      });
+    } catch (error) {
+      _error("Ошибка получения статистики рабочих логов:", error);
+      res.status(LIMITS.DEFAULT_PAGE_SIZE0).json({
+        success: false,
+        message: "Ошибка получения статистики рабочих логов",
+      });
     }
-  })).sort((a, b) => b.score - a.score);
+  },
+);
+
+// ВРЕМЕННО ОТКЛЮЧЕНО: Вспомогательные функции
+async function _getReliabilityData(_dateRange, _rowNumber) {
+  return [];
 }
 
-async function getPunctualityData(dateRange) {
-  const punctualityData = await WorkLog.findAll({
-    where: {
-      date: {
-        [Op.between]: [new Date(dateRange.startDate), new Date(dateRange.endDate)]
-      },
-      startTime: { [Op.gt]: '09:00' }
-    },
-    include: [{
-      model: User,
-      attributes: ['id', 'name', 'username']
-    }],
-    attributes: [
-      'userId',
-      [Sequelize.fn('COUNT', Sequelize.col('WorkLog.id')), 'lateCount']
-    ],
-    group: ['userId', 'User.id', 'User.name', 'User.username']
-  });
-
-  return punctualityData.map(item => ({
-    user: item.User,
-    score: parseInt(item.dataValues.lateCount || 0)
-  })).sort((a, b) => a.score - b.score);
+async function _getPunctualityData(_dateRange, _rowNumber) {
+  return [];
 }
 
-async function getWorkModeData(dateRange) {
-  const workModeData = await WorkLog.findAll({
-    where: {
-      date: {
-        [Op.between]: [new Date(dateRange.startDate), new Date(dateRange.endDate)]
-      }
-    },
-    attributes: [
-      'workMode',
-      [Sequelize.fn('COUNT', Sequelize.col('id')), 'count']
-    ],
-    group: ['workMode']
-  });
-
-  const result = {};
-  workModeData.forEach(item => {
-    result[item.workMode || 'office'] = parseInt(item.dataValues.count);
-  });
-
-  return result;
+async function _getWorkModeData(_dateRange, _rowNumber) {
+  return {};
 }
 
-module.exports = router; 
+module.exports = router;

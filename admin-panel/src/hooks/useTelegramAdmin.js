@@ -4,7 +4,7 @@ import axios from 'axios'
 import toast from 'react-hot-toast'
 
 // Fallback для продакшна
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://hr-api-placeholder.vercel.app/api'
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api'
 
 /**
  * Хук для работы с Telegram админкой

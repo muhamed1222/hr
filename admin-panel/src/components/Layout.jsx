@@ -11,28 +11,16 @@ import {
   Users, 
   BarChart3, 
   Settings, 
-  Cog,
   LogOut, 
   Menu,
-  X,
-  Building,
-  Monitor
+  X
 } from 'lucide-react'
 
 const navigation = [
   { name: 'Дашборд', href: '/', icon: LayoutDashboard },
   { name: 'Сотрудники', href: '/users', icon: Users },
-  { name: 'Заявки', href: '/absences', icon: () => <span className="text-base">📝</span> },
   { name: 'Аналитика', href: '/analytics', icon: BarChart3 },
-  { name: 'Настройки', href: '/settings', icon: Settings },
 ]
-
-// Системные настройки только для админов
-const systemConfigNav = { 
-  name: 'Система', 
-  href: '/system-config', 
-  icon: Cog 
-}
 
 // Telegram админка только для админов в Telegram
 const telegramAdminNav = { 
@@ -54,8 +42,7 @@ export default function Layout({ children }) {
   // Подготавливаем навигацию с учетом Telegram админки
   const allNavigation = [
     ...navigation,
-    ...(user?.role === 'admin' ? [telegramAdminNav] : []),
-    ...(user?.role === 'admin' ? [systemConfigNav] : [])
+    ...(user?.role === 'admin' ? [telegramAdminNav] : [])
   ]
 
   const handleLogout = () => {
@@ -185,45 +172,7 @@ export default function Layout({ children }) {
                 </Link>
               )
             })}
-
-            {user.role === 'admin' && (
-              <>
-                <SidebarItem 
-                  to="/system-config" 
-                  icon={Cog} 
-                  label="Система" 
-                  isActive={location.pathname === '/system-config'} 
-                />
-                <SidebarItem 
-                  to="/organization-settings" 
-                  icon={Building} 
-                  label="Организация" 
-                  isActive={location.pathname === '/organization-settings'} 
-                />
-                <SidebarItem 
-                  to="/system-monitoring" 
-                  icon={Monitor} 
-                  label="Мониторинг" 
-                  isActive={location.pathname === '/system-monitoring'} 
-                />
-              </>
-            )}
           </nav>
-        </div>
-        
-        <div className="flex-shrink-0 flex border-t border-gray-200 p-4">
-          <div className="flex-shrink-0 w-full group block">
-            <div className="flex items-center">
-              <div className="ml-3">
-                <p className="text-sm font-medium text-gray-700 group-hover:text-gray-900">
-                  {user?.name || 'Администратор'}
-                </p>
-                <p className="text-xs font-medium text-gray-500 group-hover:text-gray-700">
-                  {getRoleText(user?.role)}
-                </p>
-              </div>
-            </div>
-          </div>
         </div>
       </div>
     )

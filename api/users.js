@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 const { query } = require('./_database');
+const { AuthenticationError } = require('../src/services/errors');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
@@ -59,7 +60,7 @@ module.exports = async (req, res) => {
     // Проверка авторизации
     const user = authenticate(req);
     if (!user) {
-      return res.status(401).json({ error: 'Требуется авторизация' });
+      throw new AuthenticationError();
     }
 
     // GET /api/users - получить список пользователей

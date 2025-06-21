@@ -166,6 +166,22 @@ jobs:
         name: admin-panel-dist
         path: admin-panel/dist/
         
+    - name: 🔍 Check Required Secrets
+      run: |
+        if [ -z "${{ secrets.STAGING_HOST }}" ]; then
+          echo "❌ STAGING_HOST secret is not set"
+          exit 1
+        fi
+        if [ -z "${{ secrets.STAGING_USER }}" ]; then
+          echo "❌ STAGING_USER secret is not set"
+          exit 1
+        fi
+        if [ -z "${{ secrets.STAGING_SSH_KEY }}" ]; then
+          echo "❌ STAGING_SSH_KEY secret is not set"
+          exit 1
+        fi
+        echo "✅ All staging secrets are configured"
+        
     - name: 🚀 Deploy to Staging Server
       uses: appleboy/ssh-action@v1.0.0
       with:
@@ -194,6 +210,7 @@ jobs:
         text: '🎉 TimeBot успешно развёрнут на staging!'
       env:
         SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+      continue-on-error: true
 
   # 🏭 Развёртывание на production
   deploy-production:
@@ -214,6 +231,22 @@ jobs:
       with:
         name: admin-panel-dist
         path: admin-panel/dist/
+        
+    - name: 🔍 Check Required Secrets
+      run: |
+        if [ -z "${{ secrets.PRODUCTION_HOST }}" ]; then
+          echo "❌ PRODUCTION_HOST secret is not set"
+          exit 1
+        fi
+        if [ -z "${{ secrets.PRODUCTION_USER }}" ]; then
+          echo "❌ PRODUCTION_USER secret is not set"
+          exit 1
+        fi
+        if [ -z "${{ secrets.PRODUCTION_SSH_KEY }}" ]; then
+          echo "❌ PRODUCTION_SSH_KEY secret is not set"
+          exit 1
+        fi
+        echo "✅ All production secrets are configured"
         
     - name: 🚀 Deploy to Production Server
       uses: appleboy/ssh-action@v1.0.0
@@ -243,6 +276,7 @@ jobs:
         text: '🚀 TimeBot успешно развёрнут на production!'
       env:
         SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+      continue-on-error: true
         
     - name: 📢 Notify Slack (Failure)
       if: failure()
@@ -252,6 +286,7 @@ jobs:
         text: '❌ Ошибка развёртывания TimeBot на production!'
       env:
         SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+      continue-on-error: true
 
   # 🔍 Мониторинг после развёртывания
   post-deploy-monitoring:
@@ -286,6 +321,12 @@ jobs:
       run: |
         echo "🤖 Тестирование Telegram бота..."
         
+        # Проверяем наличие токена
+        if [ -z "${{ secrets.TELEGRAM_BOT_TOKEN }}" ]; then
+          echo "⚠️ TELEGRAM_BOT_TOKEN не настроен, пропускаем тест"
+          exit 0
+        fi
+        
         # Проверка webhook (если настроен)
         curl -f "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/getWebhookInfo" || true
         
@@ -302,6 +343,22 @@ jobs:
     environment: production
     
     steps:
+    - name: 🔍 Check Required Secrets
+      run: |
+        if [ -z "${{ secrets.PRODUCTION_HOST }}" ]; then
+          echo "❌ PRODUCTION_HOST secret is not set"
+          exit 1
+        fi
+        if [ -z "${{ secrets.PRODUCTION_USER }}" ]; then
+          echo "❌ PRODUCTION_USER secret is not set"
+          exit 1
+        fi
+        if [ -z "${{ secrets.PRODUCTION_SSH_KEY }}" ]; then
+          echo "❌ PRODUCTION_SSH_KEY secret is not set"
+          exit 1
+        fi
+        echo "✅ All production secrets are configured"
+        
     - name: 🔄 Rollback Production
       uses: appleboy/ssh-action@v1.0.0
       with:
@@ -321,6 +378,7 @@ jobs:
         text: '🔄 Выполнен rollback TimeBot на production!'
       env:
         SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+      continue-on-error: true
 
   # 📋 Генерация отчёта
   generate-report:
@@ -342,12 +400,12 @@ jobs:
         
         ## 📊 Results
         
-        - **Tests:** ${{ needs.test.result }}
-        - **Frontend Build:** ${{ needs.build-frontend.result }}
-        - **Docker Build:** ${{ needs.build-docker.result }}
-        - **Staging Deploy:** ${{ needs.deploy-staging.result }}
-        - **Production Deploy:** ${{ needs.deploy-production.result }}
-        - **Monitoring:** ${{ needs.post-deploy-monitoring.result }}
+        - **Tests:** ${{ needs.test.result || 'skipped' }}
+        - **Frontend Build:** ${{ needs.build-frontend.result || 'skipped' }}
+        - **Docker Build:** ${{ needs.build-docker.result || 'skipped' }}
+        - **Staging Deploy:** ${{ needs.deploy-staging.result || 'skipped' }}
+        - **Production Deploy:** ${{ needs.deploy-production.result || 'skipped' }}
+        - **Monitoring:** ${{ needs.post-deploy-monitoring.result || 'skipped' }}
         
         ## 🔗 Links
         
@@ -358,7 +416,7 @@ jobs:
         ## 🏷️ Docker Image
         
         \`\`\`
-        ${{ needs.build-docker.outputs.image }}
+        ${{ needs.build-docker.outputs.image || 'N/A' }}
         \`\`\`
         
         EOF

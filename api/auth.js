@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 const { query } = require('./_database');
+const { AuthenticationError } = require('../src/services/errors');
 
 // Настройки
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
@@ -46,7 +47,7 @@ module.exports = async (req, res) => {
       const { email, password } = await parseBody(req);
       
       if (!email || !password) {
-        return res.status(400).json({ error: 'Email и пароль обязательны' });
+        throw new AuthenticationError('Email и пароль обязательны');
       }
 
       // Демо режим для admin@example.com
@@ -81,7 +82,7 @@ module.exports = async (req, res) => {
       );
 
       if (userResult.rows.length === 0) {
-        return res.status(401).json({ error: 'Неверные учетные данные' });
+        throw new AuthenticationError('Неверные учетные данные');
       }
 
       const user = userResult.rows[0];
@@ -89,7 +90,7 @@ module.exports = async (req, res) => {
       // Проверка пароля
       const isValidPassword = await bcrypt.compare(password, user.password_hash);
       if (!isValidPassword) {
-        return res.status(401).json({ error: 'Неверные учетные данные' });
+        throw new AuthenticationError('Неверные учетные данные');
       }
 
       // Создание JWT токена
@@ -125,7 +126,7 @@ module.exports = async (req, res) => {
         const telegramData = await parseBody(req);
         
         if (!telegramData.id) {
-          return res.status(400).json({ error: 'Telegram ID обязателен' });
+          throw new AuthenticationError('Telegram ID обязателен');
         }
 
         // Всегда используем демо режим для простоты
@@ -154,10 +155,7 @@ module.exports = async (req, res) => {
         });
       } catch (telegramError) {
         console.error('Telegram auth error:', telegramError);
-        return res.status(500).json({ 
-          error: 'Ошибка Telegram авторизации',
-          details: process.env.NODE_ENV === 'development' ? telegramError.message : undefined
-        });
+        throw new AuthenticationError('Ошибка Telegram авторизации', telegramError.message);
       }
     }
 
@@ -166,7 +164,7 @@ module.exports = async (req, res) => {
       const authHeader = req.headers.authorization;
       
       if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return res.status(401).json({ error: 'Токен не предоставлен' });
+        throw new AuthenticationError('Токен не предоставлен');
       }
 
       const token = authHeader.substring(7);
@@ -183,7 +181,7 @@ module.exports = async (req, res) => {
           }
         });
       } catch (err) {
-        return res.status(401).json({ error: 'Недействительный токен' });
+        throw new AuthenticationError('Недействительный токен');
       }
     }
 

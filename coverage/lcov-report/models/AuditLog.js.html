@@ -23,9 +23,9 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">100% </span>
+                <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>4/4</span>
+                <span class='fraction'>0/5</span>
             </div>
         
             
@@ -44,9 +44,9 @@
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">100% </span>
+                <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>4/4</span>
+                <span class='fraction'>0/5</span>
             </div>
         
             
@@ -61,7 +61,7 @@
             </div>
         </template>
     </div>
-    <div class='status-line high'></div>
+    <div class='status-line low'></div>
     <pre><table class="coverage">
 <tr><td class="line-count quiet"><a name='L1'></a><a href='#L1'>1</a>
 <a name='L2'></a><a href='#L2'>2</a>
@@ -142,12 +142,13 @@
 <a name='L77'></a><a href='#L77'>77</a>
 <a name='L78'></a><a href='#L78'>78</a>
 <a name='L79'></a><a href='#L79'>79</a>
-<a name='L80'></a><a href='#L80'>80</a>
-<a name='L81'></a><a href='#L81'>81</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">3x</span>
-<span class="cline-any cline-yes">3x</span>
+<a name='L80'></a><a href='#L80'>80</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -220,97 +221,93 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">3x</span></td><td class="text"><pre class="prettyprint lang-js">const { DataTypes } = require('sequelize');
-const sequelize = require('../config/database');
+<span class="cline-any cline-no">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">"use strict";
 &nbsp;
-const AuditLog = sequelize.define('AuditLog', {
-  id: {
-    type: DataTypes.INTEGER,
-    primaryKey: true,
-    autoIncrement: true
-  },
-  userId: {
-    type: DataTypes.INTEGER,
-    allowNull: true,
-    field: 'user_id',
-    references: {
-      model: 'users',
-      key: 'id'
-    }
-  },
-  adminId: {
-    type: DataTypes.INTEGER,
-    allowNull: true,
-    field: 'admin_id',
-    references: {
-      model: 'users',
-      key: 'id'
-    }
-  },
-  action: {
-    type: DataTypes.STRING(100),
-    allowNull: false
-  },
-  resource: {
-    type: DataTypes.STRING(50),
-    allowNull: false // users, teams, work_logs, reports
-  },
-  resourceId: {
-    type: DataTypes.STRING(50),
-    allowNull: true,
-    field: 'resource_id'
-  },
-  description: {
-    type: DataTypes.TEXT,
-    allowNull: true
-  },
-  oldValues: {
-    type: DataTypes.JSON,
-    allowNull: true,
-    field: 'old_values'
-  },
-  newValues: {
-    type: DataTypes.JSON,
-    allowNull: true,
-    field: 'new_values'
-  },
-  ipAddress: {
-    type: DataTypes.STRING(45),
-    allowNull: true,
-    field: 'ip_address'
-  },
-  userAgent: {
-    type: DataTypes.TEXT,
-    allowNull: true,
-    field: 'user_agent'
-  },
-  metadata: {
-    type: DataTypes.JSON,
-    allowNull: true,
-    defaultValue: {}
-  },
-  createdAt: {
-    type: DataTypes.DATE,
-    defaultValue: DataTypes.NOW,
-    field: 'created_at'
-  }
-}, {
-  tableName: 'audit_logs',
-  timestamps: false, // только createdAt
-  underscored: true
-});
+const { DataTypes } = <span class="cstat-no" title="statement not covered" >require("sequelize");</span>
+const sequelize = <span class="cstat-no" title="statement not covered" >require("../config/database");</span>
+const { LIMITS } = <span class="cstat-no" title="statement not covered" >require("../constants");</span>
 &nbsp;
-module.exports = AuditLog; </pre></td></tr></table></pre>
+const AuditLog = <span class="cstat-no" title="statement not covered" >sequelize.define(</span>
+  "AuditLog",
+  {
+    id: {
+      type: DataTypes.INTEGER,
+      primaryKey: true,
+      autoIncrement: true,
+    },
+    userId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      field: "user_id",
+      references: {
+        model: "users",
+        key: "id",
+      },
+    },
+    adminId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      field: "admin_id",
+      references: {
+        model: "users",
+        key: "id",
+      },
+    },
+    action: {
+      type: DataTypes.STRING(LIMITS.MAX_TEAM_MEMBERS),
+      allowNull: false,
+    },
+    entityType: {
+      type: DataTypes.STRING(LIMITS.MAX_TEAM_MEMBERS),
+      allowNull: false,
+      field: "entity_type",
+    },
+    entityId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      field: "entity_id",
+    },
+    oldValues: {
+      type: DataTypes.JSON,
+      allowNull: true,
+      field: "old_values",
+    },
+    newValues: {
+      type: DataTypes.JSON,
+      allowNull: true,
+      field: "new_values",
+    },
+    ipAddress: {
+      type: DataTypes.STRING(45),
+      allowNull: true,
+      field: "ip_address",
+    },
+    userAgent: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      field: "user_agent",
+    },
+    createdAt: {
+      type: DataTypes.DATE,
+      defaultValue: DataTypes.NOW,
+      field: "created_at",
+    },
+  },
+  {
+    tableName: "audit_logs",
+    timestamps: false, // только createdAt
+    underscored: true,
+  },
+);
+&nbsp;
+<span class="cstat-no" title="statement not covered" >module.exports = AuditLog; </span></pre></td></tr></table></pre>
 
                 <div class='push'></div><!-- for sticky footer -->
             </div><!-- /wrapper -->
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-06-18T23:44:35.441Z
+                at 2025-06-20T21:30:51.682Z
             </div>
         <script src="../prettify.js"></script>
         <script>

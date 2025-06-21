@@ -22,13 +22,15 @@ export default function TopEmployeesCard({ workAnalytics, reliabilityRanking, is
   }
 
   // Топ по общему времени работы
-  const topByTotalTime = workAnalytics
+  const topByTotalTime = (workAnalytics || [])
+    .filter(item => item && typeof item === 'object')
     .sort((a, b) => (parseFloat(b.totalMinutes) || 0) - (parseFloat(a.totalMinutes) || 0))
     .slice(0, 5)
 
   // Топ по надёжности
-  const topByReliability = reliabilityRanking
-    .sort((a, b) => b.reliabilityScore - a.reliabilityScore)
+  const topByReliability = (reliabilityRanking || [])
+    .filter(item => item && typeof item === 'object')
+    .sort((a, b) => (b.reliabilityScore || 0) - (a.reliabilityScore || 0))
     .slice(0, 5)
 
   return (
@@ -144,15 +146,15 @@ export default function TopEmployeesCard({ workAnalytics, reliabilityRanking, is
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
             <div>
               <div className="text-lg font-semibold text-gray-900">
-                {workAnalytics.length}
+                {(workAnalytics || []).length}
               </div>
               <div className="text-xs text-gray-500">Активных сотрудников</div>
             </div>
             
             <div>
               <div className="text-lg font-semibold text-blue-600">
-                {workAnalytics.length > 0 ? 
-                  formatMinutes(workAnalytics.reduce((sum, item) => sum + (parseFloat(item.totalMinutes) || 0), 0))
+                {(workAnalytics || []).length > 0 ? 
+                  formatMinutes((workAnalytics || []).reduce((sum, item) => sum + (parseFloat(item.totalMinutes) || 0), 0))
                   : '0ч 0м'
                 }
               </div>
@@ -161,8 +163,8 @@ export default function TopEmployeesCard({ workAnalytics, reliabilityRanking, is
             
             <div>
               <div className="text-lg font-semibold text-green-600">
-                {reliabilityRanking.length > 0 ? 
-                  Math.round(reliabilityRanking.reduce((sum, item) => sum + item.reliabilityScore, 0) / reliabilityRanking.length)
+                {(reliabilityRanking || []).length > 0 ? 
+                  Math.round((reliabilityRanking || []).reduce((sum, item) => sum + item.reliabilityScore, 0) / (reliabilityRanking || []).length)
                   : 0
                 }
               </div>
@@ -171,7 +173,7 @@ export default function TopEmployeesCard({ workAnalytics, reliabilityRanking, is
             
             <div>
               <div className="text-lg font-semibold text-purple-600">
-                {reliabilityRanking.filter(item => item.reliabilityScore >= 90).length}
+                {(reliabilityRanking || []).filter(item => item.reliabilityScore >= 90).length}
               </div>
               <div className="text-xs text-gray-500">Отличников</div>
             </div>

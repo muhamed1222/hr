@@ -1,4 +1,8 @@
-const { sendTelegramMessage } = require('./sendTelegramMessage');
+"use strict";
+
+const { _info, _error, _warn, _debug } = require("./logger");
+
+const { _sendTelegramMessage } = require("./sendTelegramMessage");
 
 /**
  * Отправляет утреннее напоминание о приходе на работу
@@ -7,7 +11,7 @@ async function sendMorningReminder(userTelegramId, userName) {
   const message = `
 🌅 <b>Доброе утро, ${userName}!</b>
 
-⏰ Уже <b>09:50</b> - рабочий день начался!
+⏰ Уже <b>09:LIMITS.DEFAULT_PAGE_SIZE</b> - рабочий день начался!
 
 🔔 Не забудьте отметить приход:
 • 🏢 В офисе 
@@ -16,7 +20,7 @@ async function sendMorningReminder(userTelegramId, userName) {
 💡 Просто напишите боту или используйте кнопки меню.
   `.trim();
 
-  return await sendTelegramMessage(userTelegramId, message);
+  return await _sendTelegramMessage(userTelegramId, message);
 }
 
 /**
@@ -36,7 +40,7 @@ async function sendLunchStartReminder(userTelegramId, userName) {
 Приятного аппетита! 😋
   `.trim();
 
-  return await sendTelegramMessage(userTelegramId, message);
+  return await _sendTelegramMessage(userTelegramId, message);
 }
 
 /**
@@ -56,7 +60,7 @@ async function sendLunchEndReminder(userTelegramId, userName) {
 Удачной работы! 🎯
   `.trim();
 
-  return await sendTelegramMessage(userTelegramId, message);
+  return await _sendTelegramMessage(userTelegramId, message);
 }
 
 /**
@@ -66,7 +70,7 @@ async function sendEveningReminder(userTelegramId, userName) {
   const message = `
 🌆 <b>День подходит к концу, ${userName}!</b>
 
-⏰ Уже <b>17:50</b> - время подводить итоги!
+⏰ Уже <b>17:LIMITS.DEFAULT_PAGE_SIZE</b> - время подводить итоги!
 
 📋 Не забудьте:
 • ✅ Отметить уход с работы
@@ -81,29 +85,36 @@ async function sendEveningReminder(userTelegramId, userName) {
 Удачного вечера! 🌟
   `.trim();
 
-  return await sendTelegramMessage(userTelegramId, message);
+  return await _sendTelegramMessage(userTelegramId, message);
 }
 
 /**
  * Отправляет мотивационное сообщение
  */
-async function sendMotivationalReminder(userTelegramId, userName, reminderType) {
+async function sendMotivationalReminder(
+  userTelegramId,
+  userName,
+  reminderType,
+) {
   const messages = {
     morning: `☀️ Отличного дня, ${userName}! Сегодня будет продуктивно! 💪`,
     lunch: `🍽 Хорошего обеда, ${userName}! Заряжайтесь энергией! ⚡`,
-    evening: `🏆 Отличная работа сегодня, ${userName}! Заслуженный отдых! 🎉`
+    evening: `🏆 Отличная работа сегодня, ${userName}! Заслуженный отдых! 🎉`,
   };
 
   const message = messages[reminderType] || `👋 Удачного дня, ${userName}!`;
-  return await sendTelegramMessage(userTelegramId, message);
+  return await _sendTelegramMessage(userTelegramId, message);
 }
 
 /**
  * Отправляет напоминание руководителю о статистике
  */
 async function sendManagerDailyStats(managerTelegramId, stats) {
-  const completionRate = stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0;
-  
+  const completionRate =
+    stats.total > 0
+      ? Math.round((stats.completed / stats.total) * LIMITS.MAX_PAGE_SIZE)
+      : 0;
+
   const message = `
 📊 <b>Ежедневная сводка по команде</b>
 
@@ -113,42 +124,49 @@ async function sendManagerDailyStats(managerTelegramId, stats) {
 ⏳ Ещё работают: ${stats.pending}
 📈 Процент завершения: ${completionRate}%
 
-${completionRate >= 90 ? '🎉 Отличные результаты!' : 
-  completionRate >= 70 ? '👍 Хорошая работа команды!' : 
-  '⚠️ Есть над чем поработать'}
+${
+  completionRate >= 90
+    ? "🎉 Отличные результаты!"
+    : completionRate >= 70
+      ? "👍 Хорошая работа команды!"
+      : "⚠️ Есть над чем поработать"
+}
 
 🔗 Подробная статистика доступна в админ-панели.
   `.trim();
 
-  return await sendTelegramMessage(managerTelegramId, message);
+  return await _sendTelegramMessage(managerTelegramId, message);
 }
 
 /**
  * Отправляет персонализированное напоминание с учётом истории
  */
-async function sendPersonalizedReminder(user, reminderType, workLog = null) {
+async function sendPersonalizedReminder(user, reminderType, _workLog = null) {
   const { telegramId, name } = user;
-  
+
   try {
     switch (reminderType) {
-      case 'morning':
+      case "morning":
         return await sendMorningReminder(telegramId, name);
-      
-      case 'lunch_start':
+
+      case "lunch_start":
         return await sendLunchStartReminder(telegramId, name);
-      
-      case 'lunch_end':
+
+      case "lunch_end":
         return await sendLunchEndReminder(telegramId, name);
-      
-      case 'evening':
+
+      case "evening":
         return await sendEveningReminder(telegramId, name);
-      
+
       default:
-        console.warn(`⚠️ Неизвестный тип напоминания: ${reminderType}`);
+        _warn(`⚠️ Неизвестный тип напоминания: ${reminderType}`);
         return null;
     }
   } catch (error) {
-    console.error(`❌ Ошибка отправки напоминания ${reminderType} пользователю ${name}:`, error);
+    _error(
+      `❌ Ошибка отправки напоминания ${reminderType} пользователю ${name}:`,
+      error,
+    );
     return null;
   }
 }
@@ -160,5 +178,5 @@ module.exports = {
   sendEveningReminder,
   sendMotivationalReminder,
   sendManagerDailyStats,
-  sendPersonalizedReminder
-}; 
+  sendPersonalizedReminder,
+};

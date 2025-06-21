@@ -1,27 +1,31 @@
-const express = require('express');
+"use strict";
+
+const { _info, _error, _warn, _debug } = require("../utils/logger");
+
+const _express = require("express");
 const router = express.Router();
 const {
   getUsersForMorningReminder,
   getUsersForLunchStartReminder,
   getUsersForLunchEndReminder,
   getUsersForEveningReminder,
-  getReminderStats
-} = require('../cron/reminderService');
+  getReminderStats,
+} = require("../cron/reminderService");
 
 const {
   sendPersonalizedReminder,
-  sendManagerDailyStats
-} = require('../utils/reminderMessages');
+  sendManagerDailyStats,
+} = require("../utils/reminderMessages");
 
-const { User } = require('../models');
+const { User } = require("../models");
 
 /**
  * Получить статистику напоминаний
  */
-router.get('/stats', async (req, res) => {
+router.get("/stats", async (req, res) => {
   try {
     const stats = await getReminderStats();
-    
+
     const morningUsers = await getUsersForMorningReminder();
     const lunchStartUsers = await getUsersForLunchStartReminder();
     const lunchEndUsers = await getUsersForLunchEndReminder();
@@ -34,29 +38,28 @@ router.get('/stats', async (req, res) => {
         reminders: {
           morning: {
             count: morningUsers.length,
-            users: morningUsers.map(u => ({ id: u.id, name: u.name }))
+            users: morningUsers.map((u) => ({ id: u.id, name: u.name })),
           },
           lunchStart: {
             count: lunchStartUsers.length,
-            users: lunchStartUsers.map(u => ({ id: u.id, name: u.name }))
+            users: lunchStartUsers.map((u) => ({ id: u.id, name: u.name })),
           },
           lunchEnd: {
             count: lunchEndUsers.length,
-            users: lunchEndUsers.map(u => ({ id: u.id, name: u.name }))
+            users: lunchEndUsers.map((u) => ({ id: u.id, name: u.name })),
           },
           evening: {
             count: eveningUsers.length,
-            users: eveningUsers.map(u => ({ id: u.id, name: u.name }))
-          }
-        }
-      }
+            users: eveningUsers.map((u) => ({ id: u.id, name: u.name })),
+          },
+        },
+      },
     });
-
   } catch (error) {
-    console.error('❌ Ошибка получения статистики напоминаний:', error);
-    res.status(500).json({
+    _error("❌ Ошибка получения статистики напоминаний:", error);
+    res.status(LIMITS.DEFAULT_PAGE_SIZE0).json({
       success: false,
-      message: 'Ошибка получения статистики'
+      message: "Ошибка получения статистики",
     });
   }
 });
@@ -64,16 +67,16 @@ router.get('/stats', async (req, res) => {
 /**
  * Отправить тестовое напоминание конкретного типа
  */
-router.post('/test/:type', async (req, res) => {
+router.post("/test/:type", async (req, res) => {
   try {
     const { type } = req.params;
     const { userId } = req.body;
 
-    const validTypes = ['morning', 'lunch_start', 'lunch_end', 'evening'];
+    const validTypes = ["morning", "lunch_start", "lunch_end", "evening"];
     if (!validTypes.includes(type)) {
-      return res.status(400).json({
+      return res.status(HTTP_STATUS_CODES.BAD_REQUEST).json({
         success: false,
-        message: 'Неверный тип напоминания'
+        message: "Неверный тип напоминания",
       });
     }
 
@@ -81,25 +84,25 @@ router.post('/test/:type', async (req, res) => {
     if (userId) {
       user = await User.findByPk(userId);
       if (!user) {
-        return res.status(404).json({
+        return res.status(HTTP_STATUS_CODES.NOT_FOUND).json({
           success: false,
-          message: 'Пользователь не найден'
+          message: "Пользователь не найден",
         });
       }
     } else {
       // Найти любого пользователя с Telegram ID для тестирования
       user = await User.findOne({
         where: {
-          telegramId: { [require('sequelize').Op.not]: null },
-          status: 'active'
-        }
+          telegramId: { [require("sequelize").Op.not]: null },
+          status: "active",
+        },
       });
     }
 
     if (!user || !user.telegramId) {
-      return res.status(400).json({
+      return res.status(HTTP_STATUS_CODES.BAD_REQUEST).json({
         success: false,
-        message: 'Нет пользователей с настроенным Telegram'
+        message: "Нет пользователей с настроенным Telegram",
       });
     }
 
@@ -111,21 +114,20 @@ router.post('/test/:type', async (req, res) => {
         message: `Тестовое напоминание ${type} отправлено`,
         data: {
           user: { id: user.id, name: user.name },
-          telegramResult: result
-        }
+          telegramResult: result,
+        },
       });
     } else {
-      res.status(500).json({
+      res.status(LIMITS.DEFAULT_PAGE_SIZE0).json({
         success: false,
-        message: 'Ошибка отправки напоминания'
+        message: "Ошибка отправки напоминания",
       });
     }
-
   } catch (error) {
-    console.error('❌ Ошибка отправки тестового напоминания:', error);
-    res.status(500).json({
+    _error("❌ Ошибка отправки тестового напоминания:", error);
+    res.status(LIMITS.DEFAULT_PAGE_SIZE0).json({
       success: false,
-      message: 'Внутренняя ошибка сервера'
+      message: "Внутренняя ошибка сервера",
     });
   }
 });
@@ -133,45 +135,45 @@ router.post('/test/:type', async (req, res) => {
 /**
  * Запустить все напоминания определённого типа принудительно
  */
-router.post('/send/:type', async (req, res) => {
+router.post("/send/:type", async (req, res) => {
   try {
     const { type } = req.params;
-    let users = [];
-    let reminderType = '';
+    const _users = [];
+    const _reminderType = "";
 
     switch (type) {
-      case 'morning':
+      case "morning":
         users = await getUsersForMorningReminder();
-        reminderType = 'morning';
+        reminderType = "morning";
         break;
-      case 'lunch_start':
+      case "lunch_start":
         users = await getUsersForLunchStartReminder();
-        reminderType = 'lunch_start';
+        reminderType = "lunch_start";
         break;
-      case 'lunch_end':
+      case "lunch_end":
         users = await getUsersForLunchEndReminder();
-        reminderType = 'lunch_end';
+        reminderType = "lunch_end";
         break;
-      case 'evening':
+      case "evening":
         users = await getUsersForEveningReminder();
-        reminderType = 'evening';
+        reminderType = "evening";
         break;
       default:
-        return res.status(400).json({
+        return res.status(HTTP_STATUS_CODES.BAD_REQUEST).json({
           success: false,
-          message: 'Неверный тип напоминания'
+          message: "Неверный тип напоминания",
         });
     }
 
     if (users.length === 0) {
       return res.json({
         success: true,
-        message: 'Нет пользователей для отправки напоминаний',
-        data: { sent: 0, total: 0 }
+        message: "Нет пользователей для отправки напоминаний",
+        data: { sent: 0, total: 0 },
       });
     }
 
-    let sent = 0;
+    const _sent = 0;
     const results = [];
 
     for (const user of users) {
@@ -182,9 +184,11 @@ router.post('/send/:type', async (req, res) => {
       } else {
         results.push({ userId: user.id, name: user.name, success: false });
       }
-      
+
       // Пауза между отправками
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise((resolve) =>
+        setTimeout(resolve, LIMITS.MAX_PAGE_SIZE0),
+      );
     }
 
     res.json({
@@ -193,15 +197,14 @@ router.post('/send/:type', async (req, res) => {
       data: {
         sent,
         total: users.length,
-        results
-      }
+        results,
+      },
     });
-
   } catch (error) {
-    console.error('❌ Ошибка массовой отправки напоминаний:', error);
-    res.status(500).json({
+    _error("❌ Ошибка массовой отправки напоминаний:", error);
+    res.status(LIMITS.DEFAULT_PAGE_SIZE0).json({
       success: false,
-      message: 'Ошибка отправки напоминаний'
+      message: "Ошибка отправки напоминаний",
     });
   }
 });
@@ -209,26 +212,26 @@ router.post('/send/:type', async (req, res) => {
 /**
  * Отправить статистику менеджерам принудительно
  */
-router.post('/stats/send', async (req, res) => {
+router.post("/stats/send", async (req, res) => {
   try {
     const stats = await getReminderStats();
     const managers = await User.findAll({
       where: {
-        role: 'admin',
-        telegramId: { [require('sequelize').Op.not]: null },
-        status: 'active'
-      }
+        role: "admin",
+        telegramId: { [require("sequelize").Op.not]: null },
+        status: "active",
+      },
     });
 
     if (managers.length === 0) {
       return res.json({
         success: true,
-        message: 'Нет менеджеров с настроенным Telegram',
-        data: { sent: 0, total: 0 }
+        message: "Нет менеджеров с настроенным Telegram",
+        data: { sent: 0, total: 0 },
       });
     }
 
-    let sent = 0;
+    const _sent = 0;
     const results = [];
 
     for (const manager of managers) {
@@ -237,10 +240,16 @@ router.post('/stats/send', async (req, res) => {
         sent++;
         results.push({ userId: manager.id, name: manager.name, success: true });
       } else {
-        results.push({ userId: manager.id, name: manager.name, success: false });
+        results.push({
+          userId: manager.id,
+          name: manager.name,
+          success: false,
+        });
       }
-      
-      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      await new Promise((resolve) =>
+        setTimeout(resolve, LIMITS.MAX_PAGE_SIZE0),
+      );
     }
 
     res.json({
@@ -249,15 +258,14 @@ router.post('/stats/send', async (req, res) => {
       data: {
         sent,
         total: managers.length,
-        results
-      }
+        results,
+      },
     });
-
   } catch (error) {
-    console.error('❌ Ошибка отправки статистики менеджерам:', error);
-    res.status(500).json({
+    _error("❌ Ошибка отправки статистики менеджерам:", error);
+    res.status(LIMITS.DEFAULT_PAGE_SIZE0).json({
       success: false,
-      message: 'Ошибка отправки статистики'
+      message: "Ошибка отправки статистики",
     });
   }
 });
@@ -265,63 +273,62 @@ router.post('/stats/send', async (req, res) => {
 /**
  * Получить следующие запланированные запуски
  */
-router.get('/schedule', async (req, res) => {
+router.get("/schedule", async (req, res) => {
   try {
-    const moment = require('moment');
+    const _moment = require("moment");
     const now = moment();
     const today = now.clone();
-    
+
     const schedule = {
       morning: {
-        time: '09:50',
-        next: today.clone().hour(9).minute(50).second(0),
-        description: 'Напоминания о приходе на работу'
+        time: "09:LIMITS.DEFAULT_PAGE_SIZE",
+        next: today.clone().hour(9).minute(LIMITS.DEFAULT_PAGE_SIZE).second(0),
+        description: "Напоминания о приходе на работу",
       },
       lunchStart: {
-        time: '14:00',
+        time: "14:00",
         next: today.clone().hour(14).minute(0).second(0),
-        description: 'Напоминания о начале обеда'
+        description: "Напоминания о начале обеда",
       },
       lunchEnd: {
-        time: '15:00',
+        time: "15:00",
         next: today.clone().hour(15).minute(0).second(0),
-        description: 'Напоминания об окончании обеда'
+        description: "Напоминания об окончании обеда",
       },
       evening: {
-        time: '17:50',
-        next: today.clone().hour(17).minute(50).second(0),
-        description: 'Напоминания о сдаче отчёта'
+        time: "17:LIMITS.DEFAULT_PAGE_SIZE",
+        next: today.clone().hour(17).minute(LIMITS.DEFAULT_PAGE_SIZE).second(0),
+        description: "Напоминания о сдаче отчёта",
       },
       stats: {
-        time: '18:30',
+        time: "18:30",
         next: today.clone().hour(18).minute(30).second(0),
-        description: 'Статистика для менеджеров'
-      }
+        description: "Статистика для менеджеров",
+      },
     };
 
     // Если время уже прошло сегодня, показываем следующий день
-    Object.keys(schedule).forEach(key => {
+    Object.keys(schedule).forEach((key) => {
       if (schedule[key].next.isBefore(now)) {
-        schedule[key].next.add(1, 'day');
+        schedule[key].next.add(1, "day");
       }
     });
 
     res.json({
       success: true,
       data: {
-        currentTime: now.format('YYYY-MM-DD HH:mm:ss'),
-        timezone: process.env.TZ || 'Europe/Moscow',
-        schedule
-      }
+        currentTime: now.format("YYYY-MM-DD HH:mm:ss"),
+        timezone: process.env.TZ || "Europe/Moscow",
+        schedule,
+      },
     });
-
   } catch (error) {
-    console.error('❌ Ошибка получения расписания:', error);
-    res.status(500).json({
+    _error("❌ Ошибка получения расписания:", error);
+    res.status(LIMITS.DEFAULT_PAGE_SIZE0).json({
       success: false,
-      message: 'Ошибка получения расписания'
+      message: "Ошибка получения расписания",
     });
   }
 });
 
-module.exports = router; 
+module.exports = router;

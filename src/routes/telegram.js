@@ -1,18 +1,25 @@
-const express = require('express');
+"use strict";
+
+const { _info, _error, _warn, _debug } = require("../utils/logger");
+
+const _express = require("express");
 const router = express.Router();
-const { sendTestMessage, sendTelegramMessage } = require('../utils/sendTelegramMessage');
+const {
+  sendTestMessage,
+  sendTelegramMessage,
+} = require("../utils/sendTelegramMessage");
 
 /**
  * Тестовый endpoint для проверки работы уведомлений
  */
-router.post('/test', async (req, res) => {
+router.post("/test", async (req, res) => {
   try {
     const { chatId } = req.body;
 
     if (!chatId) {
-      return res.status(400).json({
+      return res.status(HTTP_STATUS_CODES.BAD_REQUEST).json({
         success: false,
-        message: 'Не указан chatId'
+        message: "Не указан chatId",
       });
     }
 
@@ -21,21 +28,20 @@ router.post('/test', async (req, res) => {
     if (result) {
       res.json({
         success: true,
-        message: 'Тестовое сообщение отправлено',
-        data: result
+        message: "Тестовое сообщение отправлено",
+        data: result,
       });
     } else {
-      res.status(500).json({
+      res.status(LIMITS.DEFAULT_PAGE_SIZE0).json({
         success: false,
-        message: 'Ошибка отправки сообщения'
+        message: "Ошибка отправки сообщения",
       });
     }
-
   } catch (error) {
-    console.error('Ошибка тестирования Telegram:', error);
-    res.status(500).json({
+    _error("Ошибка тестирования Telegram:", error);
+    res.status(LIMITS.DEFAULT_PAGE_SIZE0).json({
       success: false,
-      message: 'Внутренняя ошибка сервера'
+      message: "Внутренняя ошибка сервера",
     });
   }
 });
@@ -43,14 +49,14 @@ router.post('/test', async (req, res) => {
 /**
  * Отправка произвольного сообщения
  */
-router.post('/send', async (req, res) => {
+router.post("/send", async (req, res) => {
   try {
     const { chatId, message } = req.body;
 
     if (!chatId || !message) {
-      return res.status(400).json({
+      return res.status(HTTP_STATUS_CODES.BAD_REQUEST).json({
         success: false,
-        message: 'Не указаны chatId или message'
+        message: "Не указаны chatId или message",
       });
     }
 
@@ -59,21 +65,20 @@ router.post('/send', async (req, res) => {
     if (result) {
       res.json({
         success: true,
-        message: 'Сообщение отправлено',
-        data: result
+        message: "Сообщение отправлено",
+        data: result,
       });
     } else {
-      res.status(500).json({
+      res.status(LIMITS.DEFAULT_PAGE_SIZE0).json({
         success: false,
-        message: 'Ошибка отправки сообщения'
+        message: "Ошибка отправки сообщения",
       });
     }
-
   } catch (error) {
-    console.error('Ошибка отправки Telegram сообщения:', error);
-    res.status(500).json({
+    _error("Ошибка отправки Telegram сообщения:", error);
+    res.status(LIMITS.DEFAULT_PAGE_SIZE0).json({
       success: false,
-      message: 'Внутренняя ошибка сервера'
+      message: "Внутренняя ошибка сервера",
     });
   }
 });
@@ -81,37 +86,38 @@ router.post('/send', async (req, res) => {
 /**
  * Получение информации о боте
  */
-router.get('/bot-info', async (req, res) => {
+router.get("/bot-info", async (req, res) => {
   try {
     const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-    
-    if (!TELEGRAM_BOT_TOKEN || TELEGRAM_BOT_TOKEN === 'placeholder') {
+
+    if (!TELEGRAM_BOT_TOKEN || TELEGRAM_BOT_TOKEN === "placeholder") {
       return res.json({
         success: false,
-        message: 'Telegram Bot Token не настроен'
+        message: "Telegram Bot Token не настроен",
       });
     }
 
-    const axios = require('axios');
-    const response = await axios.get(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getMe`);
+    const _axios = require("axios");
+    const response = await axios.get(
+      `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getMe`,
+    );
 
     res.json({
       success: true,
       data: response.data,
       instructions: {
         getUpdates: `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getUpdates`,
-        testEndpoint: '/api/telegram/test',
-        note: 'Для получения chat_id напишите боту /start и посмотрите getUpdates'
-      }
+        testEndpoint: "/api/telegram/test",
+        note: "Для получения chat_id напишите боту /start и посмотрите getUpdates",
+      },
     });
-
   } catch (error) {
-    console.error('Ошибка получения информации о боте:', error);
-    res.status(500).json({
+    _error("Ошибка получения информации о боте:", error);
+    res.status(LIMITS.DEFAULT_PAGE_SIZE0).json({
       success: false,
-      message: 'Ошибка подключения к Telegram API'
+      message: "Ошибка подключения к Telegram API",
     });
   }
 });
 
-module.exports = router; 
+module.exports = router;

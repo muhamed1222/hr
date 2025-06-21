@@ -1,13 +1,19 @@
-const { sendTelegramMessage } = require('../utils/sendTelegramMessage');
-const { info } = require('../utils/logger');
+"use strict";
 
-const WEB_APP_URL = process.env.WEB_APP_URL || 'http://localhost:5173';
+const { _info, _error, _warn, _debug } = require("../utils/logger");
+
+const { _sendTelegramMessage } = require("../utils/sendTelegramMessage");
+
+const WEB_APP_URL = process.env.WEB_APP_URL || "http://localhost:5173";
 
 /**
  * Проверяет можно ли использовать URL в Telegram кнопках
  */
 function canUseUrlInTelegram(url) {
-  return !url.includes('localhost') && (url.startsWith('https://') || process.env.NODE_ENV === 'development');
+  return (
+    !url.includes("localhost") &&
+    (url.startsWith("https://") || process.env.NODE_ENV === "development")
+  );
 }
 
 /**
@@ -16,19 +22,19 @@ function canUseUrlInTelegram(url) {
  */
 async function notifyMissedWorklog(payload) {
   const { user, date, missedType, managerTelegramId } = payload;
-  
+
   // Определяем тип пропуска
   const missedMessages = {
-    arrival: '⏰ Не отметили приход на работу',
-    departure: '🏃‍♂️ Не отметили уход с работы',
-    report: '📝 Не сдали ежедневный отчёт',
-    full_day: '🚫 Отсутствовали весь день'
+    arrival: "⏰ Не отметили приход на работу",
+    departure: "🏃‍♂️ Не отметили уход с работы",
+    report: "📝 Не сдали ежедневный отчёт",
+    full_day: "🚫 Отсутствовали весь день",
   };
 
-  const dateStr = new Date(date).toLocaleDateString('ru-RU');
-  
+  const dateStr = new Date(date).toLocaleDateString("ru-RU");
+
   // Уведомление сотруднику
-  if (user.telegramId && missedType !== 'full_day') {
+  if (user.telegramId && missedType !== "full_day") {
     const userMessage = `
 ⚠️ <b>Пропущена отметка времени</b>
 
@@ -36,80 +42,89 @@ async function notifyMissedWorklog(payload) {
 🔴 <b>Проблема:</b> ${missedMessages[missedType]}
 
 💡 <b>Что делать:</b>
-${missedType === 'arrival' ? '• Отметьте приход сейчас или обратитесь к менеджеру' : ''}
-${missedType === 'departure' ? '• Отметьте уход или уведомите менеджера' : ''}
-${missedType === 'report' ? '• Заполните отчёт о проделанной работе' : ''}
+${missedType === "arrival" ? "• Отметьте приход сейчас или обратитесь к менеджеру" : ""}
+${missedType === "departure" ? "• Отметьте уход или уведомите менеджера" : ""}
+${missedType === "report" ? "• Заполните отчёт о проделанной работе" : ""}
 
 ⏱️ Не забывайте отмечать время для точного учёта рабочих часов.
-${!canUseUrlInTelegram(WEB_APP_URL) ? '\n🔗 Веб-интерфейс будет доступен после настройки публичного URL.' : ''}
+${!canUseUrlInTelegram(WEB_APP_URL) ? "\n🔗 Веб-интерфейс будет доступен после настройки публичного URL." : ""}
     `.trim();
 
     const userOptions = {
-      parse_mode: 'HTML'
+      parse_mode: "HTML",
     };
 
     if (canUseUrlInTelegram(WEB_APP_URL)) {
       userOptions.reply_markup = {
         inline_keyboard: [
           [
-            { 
-              text: missedType === 'report' ? '📝 Написать отчёт' : '⏰ Отметить время', 
-              url: missedType === 'report'
-            ? `${WEB_APP_URL}?page=report`
-            : `${WEB_APP_URL}?page=tracking` 
-            }
-          ]
-        ]
+            {
+              text:
+                missedType === "report"
+                  ? "📝 Написать отчёт"
+                  : "⏰ Отметить время",
+              url:
+                missedType === "report"
+                  ? `${WEB_APP_URL}?page=report`
+                  : `${WEB_APP_URL}?page=tracking`,
+            },
+          ],
+        ],
       };
     }
 
-    await sendTelegramMessage(user.telegramId, userMessage, userOptions);
-  }
+    // Сообщение для менеджера
+    const _managerMessage = `
+🚨 <b>Пропущен рабочий лог</b>
 
-  // Уведомление менеджеру (если есть)
-  if (managerTelegramId) {
-    const managerMessage = `
-👀 <b>Пропуск у сотрудника</b>
+👤 Сотрудник: ${user.firstName} ${user.lastName}
+📅 Дата: ${dateStr}
+⏰ Тип пропуска: ${missedMessages[missedType]}
 
-👤 <b>Сотрудник:</b> ${user.firstName} ${user.lastName || ''}
-📅 <b>Дата:</b> ${dateStr}
-🔴 <b>Тип пропуска:</b> ${missedMessages[missedType]}
-
-${missedType === 'full_day' ? 
-  '❗ <b>Сотрудник не появлялся на работе весь день</b>' : 
-  '⚠️ Требуется внимание или корректировка времени'}
-
-💼 Проверьте, нужна ли корректировка в системе.
-${!canUseUrlInTelegram(WEB_APP_URL) ? '\n🔗 Веб-панель управления будет доступна после настройки публичного URL.' : ''}
+🔗 <a href="${WEB_APP_URL}/admin/worklogs">Просмотреть в админке</a>
     `.trim();
 
     const managerOptions = {
-      parse_mode: 'HTML'
+      parse_mode: "HTML",
     };
 
     if (canUseUrlInTelegram(WEB_APP_URL)) {
       managerOptions.reply_markup = {
         inline_keyboard: [
           [
-            { 
-              text: '👥 Управление командой', 
-              url: `${WEB_APP_URL}?page=team` 
-            }
+            {
+              text: "👥 Управление командой",
+              url: `${WEB_APP_URL}?page=team`,
+            },
           ],
           [
             {
-              text: '✏️ Редактировать лог',
-              url: `${WEB_APP_URL}?page=employee&id=${user.id}`
-            }
-          ]
-        ]
+              text: "✏️ Редактировать лог",
+              url: `${WEB_APP_URL}?page=employee&id=${user.id}`,
+            },
+          ],
+        ],
       };
     }
 
-    await sendTelegramMessage(managerTelegramId, managerMessage, managerOptions);
-  }
+    try {
+      // Отправляем уведомление пользователю
+      if (user.telegramId) {
+        await _sendTelegramMessage(user.telegramId, userMessage, userOptions);
+      }
 
-  info(`📢 Уведомление о пропуске отправлено: ${user.firstName} - ${missedType} - ${dateStr}`);
+      // Отправляем уведомление менеджеру
+      if (managerTelegramId) {
+        await _sendTelegramMessage(managerTelegramId, _managerMessage, managerOptions);
+      }
+
+      _info(
+        `📱 Уведомления о пропуске отправлены: ${user.firstName} - ${dateStr}`,
+      );
+    } catch (error) {
+      _error("❌ Ошибка отправки уведомлений о пропуске:", error);
+    }
+  }
 }
 
-module.exports = { notifyMissedWorklog }; 
+module.exports = { notifyMissedWorklog };

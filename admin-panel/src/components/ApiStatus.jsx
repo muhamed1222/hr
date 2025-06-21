@@ -16,7 +16,7 @@ export default function ApiStatus({ className = '' }) {
       const controller = new AbortController()
       const timeoutId = setTimeout(() => controller.abort(), 5000)
 
-      const response = await fetch(`${API_BASE_URL}/health`, {
+      const response = await fetch(`${API_BASE_URL}/../health`, {
         signal: controller.signal,
         mode: 'cors',
         cache: 'no-cache'

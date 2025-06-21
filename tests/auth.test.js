@@ -2,12 +2,14 @@ const request = require('supertest');
 const bcrypt = require('bcryptjs');
 const express = require('express');
 const { User } = require('../src/models');
+const { errorHandler } = require('../src/services/errors');
 
 // Создаем тестовое приложение
 const createTestApp = () => {
   const app = express();
   app.use(express.json());
   app.use('/api/auth', require('../src/routes/auth'));
+  app.use(errorHandler);
   return app;
 };
 

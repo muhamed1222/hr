@@ -1,13 +1,19 @@
-const { sendTelegramMessage } = require('../utils/sendTelegramMessage');
-const { info, error } = require('../utils/logger');
+"use strict";
 
-const WEB_APP_URL = process.env.WEB_APP_URL || 'http://localhost:5173';
+const { _info, _error, _warn, _debug } = require("../utils/logger");
+
+const { _sendTelegramMessage } = require("../utils/sendTelegramMessage");
+
+const WEB_APP_URL = process.env.WEB_APP_URL || "http://localhost:5173";
 
 /**
  * Проверяет можно ли использовать URL в Telegram кнопках
  */
 function canUseUrlInTelegram(url) {
-  return !url.includes('localhost') && (url.startsWith('https://') || process.env.NODE_ENV === 'development');
+  return (
+    !url.includes("localhost") &&
+    (url.startsWith("https://") || process.env.NODE_ENV === "development")
+  );
 }
 
 /**
@@ -15,26 +21,30 @@ function canUseUrlInTelegram(url) {
  * @param {Object} statsData - Данные статистики
  */
 async function notifyTeamStats(statsData) {
-  const { 
-    date, 
-    totalEmployees, 
-    presentEmployees, 
-    absentEmployees, 
+  const {
+    date,
+    totalEmployees,
+    presentEmployees,
+    absentEmployees,
     reportsSubmitted,
     averageWorkHours,
-    managers 
+    managers,
   } = statsData;
 
-  const dateStr = new Date(date).toLocaleDateString('ru-RU');
-  const attendanceRate = Math.round((presentEmployees / totalEmployees) * 100);
-  const reportRate = Math.round((reportsSubmitted / presentEmployees) * 100);
+  const dateStr = new Date(date).toLocaleDateString("ru-RU");
+  const attendanceRate = Math.round(
+    (presentEmployees / totalEmployees) * LIMITS.MAX_PAGE_SIZE,
+  );
+  const reportRate = Math.round(
+    (reportsSubmitted / presentEmployees) * LIMITS.MAX_PAGE_SIZE,
+  );
 
   // Формируем краткий обзор
   const summary = `
 📊 <b>Ежедневная статистика готова</b>
 
 📅 <b>Дата:</b> ${dateStr}
-⏰ <b>Время создания:</b> ${new Date().toLocaleTimeString('ru-RU')}
+⏰ <b>Время создания:</b> ${new Date().toLocaleTimeString("ru-RU")}
 
 <b>📈 Основные показатели:</b>
 👥 Всего сотрудников: ${totalEmployees}
@@ -43,85 +53,101 @@ async function notifyTeamStats(statsData) {
 📝 Отчёты сданы: ${reportsSubmitted}/${presentEmployees} (${reportRate}%)
 ⏱️ Ср. раб. время: ${averageWorkHours} ч.
 
-${attendanceRate >= 90 ? '🎉 Отличная посещаемость!' : 
-  attendanceRate >= 75 ? '👍 Хорошая посещаемость' : 
-  '⚠️ Низкая посещаемость - требует внимания'}
+${
+  attendanceRate >= 90
+    ? "🎉 Отличная посещаемость!"
+    : attendanceRate >= 75
+      ? "👍 Хорошая посещаемость"
+      : "⚠️ Низкая посещаемость - требует внимания"
+}
 
 💡 Нажмите ниже для подробного анализа.
-${!canUseUrlInTelegram(WEB_APP_URL) ? '\n🔗 Веб-отчёты будут доступны после настройки публичного URL.' : ''}
+${!canUseUrlInTelegram(WEB_APP_URL) ? "\n🔗 Веб-отчёты будут доступны после настройки публичного URL." : ""}
   `.trim();
 
   const options = {
-    parse_mode: 'HTML'
+    parse_mode: "HTML",
   };
 
   if (canUseUrlInTelegram(WEB_APP_URL)) {
     options.reply_markup = {
       inline_keyboard: [
         [
-          { 
-            text: '📊 Открыть полный отчёт', 
-            url: `${WEB_APP_URL}?page=stats&date=${date}` 
-          }
+          {
+            text: "📊 Открыть полный отчёт",
+            url: `${WEB_APP_URL}?page=stats&date=${date}`,
+          },
         ],
         [
           {
-            text: '📅 Статистика за сегодня',
-            url: `${WEB_APP_URL}?page=logs&filter=today`
+            text: "📅 Статистика за сегодня",
+            url: `${WEB_APP_URL}?page=logs&filter=today`,
           },
           {
-            text: '👥 Управление командой',
-            url: `${WEB_APP_URL}?page=team`
-          }
+            text: "👥 Управление командой",
+            url: `${WEB_APP_URL}?page=team`,
+          },
         ],
         [
           {
-            text: '📈 Экспорт данных',
-            url: `${WEB_APP_URL}?page=reports`
-          }
-        ]
-      ]
+            text: "📈 Экспорт данных",
+            url: `${WEB_APP_URL}?page=reports`,
+          },
+        ],
+      ],
     };
   }
 
   // Отправляем всем менеджерам и администраторам
   const recipients = managers || [];
-  
+
   for (const manager of recipients) {
     if (manager.telegramId) {
       try {
-        await sendTelegramMessage(manager.telegramId, summary, options);
+        await _sendTelegramMessage(manager.telegramId, summary, options);
 
-        info(`📊 Статистика отправлена менеджеру: ${manager.firstName} (${manager.telegramId})`);
+        _info(
+          `📊 Статистика отправлена менеджеру: ${manager.firstName} (${manager.telegramId})`,
+        );
       } catch (err) {
-        error(`❌ Ошибка отправки статистики менеджеру ${manager.firstName}:`, err);
+        _error(
+          `❌ Ошибка отправки статистики менеджеру ${manager.firstName}:`,
+          err,
+        );
       }
     }
   }
 
-  // Дополнительно отправляем администраторам детальную информацию
-  const adminSummary = `
-📊 <b>Детальная статистика команды</b>
+  // Сводка для администраторов
+  const _adminSummary = `
+📊 <b>Ежедневная сводка по команде</b>
 
-📅 <b>Дата:</b> ${dateStr}
+📅 Дата: ${date}
+👥 Всего сотрудников: ${totalEmployees}
+✅ Присутствуют: ${presentEmployees}
+❌ Отсутствуют: ${absentEmployees}
+📝 Отчёты сданы: ${reportsSubmitted}
+⏱ Среднее время работы: ${averageWorkHours}ч
 
-<b>🔍 Анализ присутствия:</b>
-• Процент посещаемости: ${attendanceRate}%
-• Процент сданных отчётов: ${reportRate}%
-• Среднее время работы: ${averageWorkHours} часов
-
-<b>🚨 Требует внимания:</b>
-${absentEmployees > 0 ? `• ${absentEmployees} сотрудников отсутствовали` : '• Все сотрудники присутствовали'}
-${reportRate < 100 ? `• ${presentEmployees - reportsSubmitted} сотрудников не сдали отчёты` : '• Все отчёты сданы вовремя'}
-
-<b>📋 Рекомендации:</b>
-${attendanceRate < 75 ? '• Проверить причины частых отсутствий\n' : ''}${reportRate < 80 ? '• Напомнить о важности ежедневных отчётов\n' : ''}${averageWorkHours < 7 ? '• Обратить внимание на продолжительность рабочего дня' : ''}
-
-💼 Система готова к дальнейшему анализу данных.
+🔗 <a href="${WEB_APP_URL}/admin/analytics">Подробная аналитика</a>
   `.trim();
 
+  // Отправляем уведомления менеджерам
+  for (const manager of managers) {
+    try {
+      await _sendTelegramMessage(manager.telegramId, _adminSummary, {
+        parse_mode: "HTML",
+        disable_web_page_preview: true,
+      });
+    } catch (error) {
+      _error(`❌ Ошибка отправки сводки менеджеру ${manager.firstName}:`, error);
+    }
+  }
+
   // Здесь можно добавить отправку администраторам
-  info(`📊 Ежедневная статистика сформирована: ${dateStr} - ${attendanceRate}% посещаемость`);
+  _info(
+    `📊 Ежедневная статистика сформирована: ${dateStr} - ${attendanceRate}% посещаемость`,
+  );
 }
 
 module.exports = { notifyTeamStats }; 

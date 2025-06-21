@@ -25,7 +25,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/12</span>
+                <span class='fraction'>0/9</span>
             </div>
         
             
@@ -46,7 +46,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/12</span>
+                <span class='fraction'>0/9</span>
             </div>
         
             
@@ -85,58 +85,73 @@
 <a name='L20'></a><a href='#L20'>20</a>
 <a name='L21'></a><a href='#L21'>21</a>
 <a name='L22'></a><a href='#L22'>22</a>
-<a name='L23'></a><a href='#L23'>23</a></td><td class="line-coverage quiet"><span class="cline-any cline-no">&nbsp;</span>
+<a name='L23'></a><a href='#L23'>23</a>
+<a name='L24'></a><a href='#L24'>24</a>
+<a name='L25'></a><a href='#L25'>25</a>
+<a name='L26'></a><a href='#L26'>26</a>
+<a name='L27'></a><a href='#L27'>27</a>
+<a name='L28'></a><a href='#L28'>28</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">const { sequelize } = <span class="cstat-no" title="statement not covered" >require('../models');</span>
+<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">"use strict";
+&nbsp;
+const { info, error, warn, debug } = <span class="cstat-no" title="statement not covered" >require("../utils/logger");</span>
+&nbsp;
+const { sequelize } = <span class="cstat-no" title="statement not covered" >require("../models");</span>
 &nbsp;
 async function <span class="fstat-no" title="function not covered" >migrate(</span>) {
 <span class="cstat-no" title="statement not covered" >  try {</span>
-<span class="cstat-no" title="statement not covered" >    console.log('🔄 Начинаем миграцию базы данных...');</span>
+    // // info('🔄 Начинаем миграцию базы данных...');
 &nbsp;
     // Проверяем подключение
 <span class="cstat-no" title="statement not covered" >    await sequelize.authenticate();</span>
-<span class="cstat-no" title="statement not covered" >    console.log('✅ Подключение к базе данных установлено');</span>
+    // // info('✅ Подключение к базе данных установлено');
 &nbsp;
     // Синхронизируем модели (создаём таблицы)
-<span class="cstat-no" title="statement not covered" >    await sequelize.sync({ force: process.env.NODE_ENV === 'development' });</span>
-<span class="cstat-no" title="statement not covered" >    console.log('✅ Модели синхронизированы');</span>
+<span class="cstat-no" title="statement not covered" >    await sequelize.sync({ force: process.env.NODE_ENV === "development" });</span>
+    // // info('✅ Модели синхронизированы');
 &nbsp;
-<span class="cstat-no" title="statement not covered" >    console.log('🎉 Миграция завершена успешно!');</span>
+    // // info('🎉 Миграция завершена успешно!');
 <span class="cstat-no" title="statement not covered" >    process.exit(0);</span>
   } catch (error) {
-<span class="cstat-no" title="statement not covered" >    console.error('❌ Ошибка миграции:', error);</span>
+<span class="cstat-no" title="statement not covered" >    error("❌ Ошибка миграции:", error);</span>
 <span class="cstat-no" title="statement not covered" >    process.exit(1);</span>
   }
 }
 &nbsp;
-<span class="cstat-no" title="statement not covered" >migrate(); </span></pre></td></tr></table></pre>
+<span class="cstat-no" title="statement not covered" >migrate();</span>
+&nbsp;</pre></td></tr></table></pre>
 
                 <div class='push'></div><!-- for sticky footer -->
             </div><!-- /wrapper -->
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-06-18T23:44:35.485Z
+                at 2025-06-20T21:30:51.748Z
             </div>
         <script src="../prettify.js"></script>
         <script>

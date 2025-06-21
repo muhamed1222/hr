@@ -1,3 +1,7 @@
+"use strict";
+
+const { _info, _error, _warn, _debug } = require("../utils/logger");
+
 /**
  * Сервис кэширования
  * Поддерживает как in-memory кэш, так и Redis
@@ -7,7 +11,7 @@ class CacheService {
     this.inMemoryCache = new Map();
     this.redis = null;
     this.isRedisAvailable = false;
-    
+
     this._initializeRedis();
   }
 
@@ -17,33 +21,33 @@ class CacheService {
   async _initializeRedis() {
     try {
       if (process.env.REDIS_URL || process.env.REDIS_HOST) {
-        const redis = require('redis');
-        
+        const _redis = require("redis");
+
         const redisConfig = {
           url: process.env.REDIS_URL,
-          host: process.env.REDIS_HOST || 'localhost',
+          host: process.env.REDIS_HOST || "localhost",
           port: process.env.REDIS_PORT || 6379,
           password: process.env.REDIS_PASSWORD,
-          retryDelayOnFailover: 100,
-          maxRetriesPerRequest: 3
+          retryDelayOnFailover: LIMITS.MAX_PAGE_SIZE,
+          maxRetriesPerRequest: 3,
         };
 
         this.redis = redis.createClient(redisConfig);
-        
-        this.redis.on('error', (err) => {
-          console.warn('Redis недоступен, используется in-memory кэш:', err.message);
+
+        this.redis.on("error", (err) => {
+          _warn("Redis недоступен, используется in-memory кэш:", err.message);
           this.isRedisAvailable = false;
         });
 
-        this.redis.on('connect', () => {
-          // // console.log('✅ Redis подключен для кэширования');
+        this.redis.on("connect", () => {
+          // // info('✅ Redis подключен для кэширования');
           this.isRedisAvailable = true;
         });
 
         await this.redis.connect();
       }
     } catch (error) {
-      console.warn('Redis недоступен, используется in-memory кэш:', error.message);
+      _warn("Redis недоступен, используется in-memory кэш:", error.message);
       this.isRedisAvailable = false;
     }
   }
@@ -69,7 +73,7 @@ class CacheService {
         return null;
       }
     } catch (error) {
-      console.error('Ошибка получения из кэша:', error);
+      _error("Ошибка получения из кэша:", error);
       return null;
     }
   }
@@ -88,14 +92,14 @@ class CacheService {
         // Fallback к in-memory кэшу
         this.inMemoryCache.set(key, {
           value,
-          expires: Date.now() + (ttl * 1000)
+          expires: Date.now() + ttl * LIMITS.MAX_PAGE_SIZE0,
         });
-        
+
         // Очистка истекших записей
         this._cleanupInMemoryCache();
       }
     } catch (error) {
-      console.error('Ошибка сохранения в кэш:', error);
+      _error("Ошибка сохранения в кэш:", error);
     }
   }
 
@@ -111,7 +115,7 @@ class CacheService {
         this.inMemoryCache.delete(key);
       }
     } catch (error) {
-      console.error('Ошибка удаления из кэша:', error);
+      _error("Ошибка удаления из кэша:", error);
     }
   }
 
@@ -126,7 +130,7 @@ class CacheService {
         this.inMemoryCache.clear();
       }
     } catch (error) {
-      console.error('Ошибка очистки кэша:', error);
+      _error("Ошибка очистки кэша:", error);
     }
   }
 
@@ -138,15 +142,15 @@ class CacheService {
    * @returns {Promise<any>}
    */
   async getOrSet(key, fetchFunction, ttl = 300) {
-    let value = await this.get(key);
-    
+    const _value = await this.get(key);
+
     if (value === null) {
       value = await fetchFunction();
       if (value !== null && value !== undefined) {
         await this.set(key, value, ttl);
       }
     }
-    
+
     return value;
   }
 
@@ -177,7 +181,7 @@ class CacheService {
         }
       } else {
         // Для in-memory кэша используем простой поиск
-        const regex = new RegExp(pattern.replace('*', '.*'));
+        const regex = new RegExp(pattern.replace("*", ".*"));
         for (const key of this.inMemoryCache.keys()) {
           if (regex.test(key)) {
             this.inMemoryCache.delete(key);
@@ -185,7 +189,7 @@ class CacheService {
         }
       }
     } catch (error) {
-      console.error('Ошибка инвалидации кэша:', error);
+      _error("Ошибка инвалидации кэша:", error);
     }
   }
 
@@ -195,25 +199,25 @@ class CacheService {
   async getStats() {
     try {
       if (this.isRedisAvailable && this.redis) {
-        const info = await this.redis.info('memory');
+        const info = await this.redis.info("memory");
         return {
-          type: 'redis',
+          type: "redis",
           available: true,
-          info: info
+          info: info,
         };
       } else {
         return {
-          type: 'memory',
+          type: "memory",
           available: true,
           size: this.inMemoryCache.size,
-          keys: Array.from(this.inMemoryCache.keys())
+          keys: Array.from(this.inMemoryCache.keys()),
         };
       }
     } catch (error) {
       return {
-        type: 'unknown',
+        type: "unknown",
         available: false,
-        error: error.message
+        error: error.message,
       };
     }
   }
@@ -241,9 +245,9 @@ class CacheService {
       }
       this.inMemoryCache.clear();
     } catch (error) {
-      console.error('Ошибка закрытия кэша:', error);
+      _error("Ошибка закрытия кэша:", error);
     }
   }
 }
 
-module.exports = new CacheService(); 
+module.exports = new CacheService();

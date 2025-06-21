@@ -1,4 +1,8 @@
-const { AuditLog } = require('../models');
+"use strict";
+
+const { _info, _error, _warn, _debug } = require("./logger");
+
+const { AuditLog } = require("../models");
 
 /**
  * Класс для логирования действий пользователей
@@ -30,7 +34,7 @@ class AuditLogger {
     newValues = null,
     ipAddress = null,
     userAgent = null,
-    metadata = {}
+    metadata = {},
   }) {
     try {
       await AuditLog.create({
@@ -44,12 +48,12 @@ class AuditLogger {
         newValues,
         ipAddress,
         userAgent,
-        metadata
+        metadata,
       });
-      
-      // // console.log(`📝 Аудит лог: ${action} ${resource} by admin ${adminId}`);
+
+      // // info(`📝 Аудит лог: ${action} ${resource} by admin ${adminId}`);
     } catch (error) {
-      console.error('❌ Ошибка записи аудит лога:', error);
+      _error("❌ Ошибка записи аудит лога:", error);
       // Не прерываем выполнение основного действия
     }
   }
@@ -60,8 +64,8 @@ class AuditLogger {
   static async logUserCreated(adminId, newUser, req) {
     return this.log({
       adminId,
-      action: 'create',
-      resource: 'users',
+      action: "create",
+      resource: "users",
       resourceId: newUser.id,
       description: `Создан новый пользователь: ${newUser.name} (${newUser.username})`,
       newValues: {
@@ -69,10 +73,10 @@ class AuditLogger {
         name: newUser.name,
         username: newUser.username,
         role: newUser.role,
-        status: newUser.status
+        status: newUser.status,
       },
       ipAddress: req?.clientIP,
-      userAgent: req?.userAgent
+      userAgent: req?.userAgent,
     });
   }
 
@@ -81,19 +85,19 @@ class AuditLogger {
    */
   static async logUserUpdated(adminId, userId, oldValues, newValues, req) {
     const changes = this.getChangedFields(oldValues, newValues);
-    
+
     return this.log({
       adminId,
       userId,
-      action: 'update',
-      resource: 'users',
+      action: "update",
+      resource: "users",
       resourceId: userId,
-      description: `Обновлены данные пользователя. Изменения: ${changes.join(', ')}`,
+      description: `Обновлены данные пользователя. Изменения: ${changes.join(", ")}`,
       oldValues,
       newValues,
       ipAddress: req?.clientIP,
       userAgent: req?.userAgent,
-      metadata: { changedFields: changes }
+      metadata: { changedFields: changes },
     });
   }
 
@@ -104,14 +108,14 @@ class AuditLogger {
     return this.log({
       adminId,
       userId,
-      action: 'deactivate',
-      resource: 'users',
+      action: "deactivate",
+      resource: "users",
       resourceId: userId,
       description: `Деактивирован пользователь: ${userInfo.name} (${userInfo.username})`,
-      oldValues: { status: 'active' },
-      newValues: { status: 'inactive' },
+      oldValues: { status: "active" },
+      newValues: { status: "inactive" },
       ipAddress: req?.clientIP,
-      userAgent: req?.userAgent
+      userAgent: req?.userAgent,
     });
   }
 
@@ -121,18 +125,18 @@ class AuditLogger {
   static async logTeamCreated(adminId, newTeam, req) {
     return this.log({
       adminId,
-      action: 'create',
-      resource: 'teams',
+      action: "create",
+      resource: "teams",
       resourceId: newTeam.id,
       description: `Создана новая команда: ${newTeam.name}`,
       newValues: {
         id: newTeam.id,
         name: newTeam.name,
         managerId: newTeam.managerId,
-        status: newTeam.status
+        status: newTeam.status,
       },
       ipAddress: req?.clientIP,
-      userAgent: req?.userAgent
+      userAgent: req?.userAgent,
     });
   }
 
@@ -141,42 +145,49 @@ class AuditLogger {
    */
   static async logTeamMembershipChanged(adminId, teamId, userId, action, req) {
     const actions = {
-      add: 'Добавлен в команду',
-      remove: 'Удалён из команды',
-      role_change: 'Изменена роль в команде'
+      add: "Добавлен в команду",
+      remove: "Удалён из команды",
+      role_change: "Изменена роль в команде",
     };
 
     return this.log({
       adminId,
       userId,
       action: `team_${action}`,
-      resource: 'teams',
+      resource: "teams",
       resourceId: teamId,
       description: `${actions[action]} пользователь ID: ${userId}`,
       ipAddress: req?.clientIP,
       userAgent: req?.userAgent,
-      metadata: { teamId, memberAction: action }
+      metadata: { teamId, memberAction: action },
     });
   }
 
   /**
    * Логирует редактирование рабочего лога
    */
-  static async logWorkLogEdited(adminId, userId, workLogId, oldValues, newValues, req) {
+  static async logWorkLogEdited(
+    adminId,
+    userId,
+    workLogId,
+    oldValues,
+    newValues,
+    req,
+  ) {
     const changes = this.getChangedFields(oldValues, newValues);
-    
+
     return this.log({
       adminId,
       userId,
-      action: 'update',
-      resource: 'work_logs',
+      action: "update",
+      resource: "work_logs",
       resourceId: workLogId,
-      description: `Отредактирован рабочий лог. Изменения: ${changes.join(', ')}`,
+      description: `Отредактирован рабочий лог. Изменения: ${changes.join(", ")}`,
       oldValues,
       newValues,
       ipAddress: req?.clientIP,
       userAgent: req?.userAgent,
-      metadata: { changedFields: changes }
+      metadata: { changedFields: changes },
     });
   }
 
@@ -186,15 +197,15 @@ class AuditLogger {
   static async logReportExported(adminId, reportType, params, req) {
     return this.log({
       adminId,
-      action: 'export',
-      resource: 'reports',
+      action: "export",
+      resource: "reports",
       description: `Экспортирован отчёт: ${reportType}`,
       ipAddress: req?.clientIP,
       userAgent: req?.userAgent,
       metadata: {
         reportType,
-        exportParams: params
-      }
+        exportParams: params,
+      },
     });
   }
 
@@ -204,11 +215,11 @@ class AuditLogger {
   static async logLogin(userId, req) {
     return this.log({
       adminId: userId,
-      action: 'login',
-      resource: 'auth',
-      description: 'Вход в систему',
+      action: "login",
+      resource: "auth",
+      description: "Вход в систему",
       ipAddress: req?.clientIP,
-      userAgent: req?.userAgent
+      userAgent: req?.userAgent,
     });
   }
 
@@ -217,13 +228,13 @@ class AuditLogger {
    */
   static getChangedFields(oldValues, newValues) {
     const changes = [];
-    
+
     for (const key in newValues) {
       if (oldValues[key] !== newValues[key]) {
         changes.push(key);
       }
     }
-    
+
     return changes;
   }
 
@@ -237,19 +248,19 @@ class AuditLogger {
     action = null,
     startDate = null,
     endDate = null,
-    limit = 50,
-    offset = 0
+    limit = LIMITS.DEFAULT_PAGE_SIZE,
+    offset = 0,
   }) {
     const where = {};
-    
+
     if (adminId) where.adminId = adminId;
     if (userId) where.userId = userId;
     if (resource) where.resource = resource;
     if (action) where.action = action;
-    
+
     if (startDate && endDate) {
       where.createdAt = {
-        [require('sequelize').Op.between]: [startDate, endDate]
+        [require("sequelize").Op.between]: [startDate, endDate],
       };
     }
 
@@ -257,20 +268,20 @@ class AuditLogger {
       where,
       include: [
         {
-          model: require('../models').User,
-          as: 'admin',
-          attributes: ['id', 'name', 'username']
+          model: require("../models").User,
+          as: "admin",
+          attributes: ["id", "name", "username"],
         },
         {
-          model: require('../models').User,
-          as: 'user',
-          attributes: ['id', 'name', 'username'],
-          required: false
-        }
+          model: require("../models").User,
+          as: "user",
+          attributes: ["id", "name", "username"],
+          required: false,
+        },
       ],
-      order: [['createdAt', 'DESC']],
+      order: [["createdAt", "DESC"]],
       limit,
-      offset
+      offset,
     });
 
     return { logs, total: count };
@@ -281,58 +292,58 @@ class AuditLogger {
     return this.log({
       adminId: userId,
       userId,
-      action: 'create',
-      resource: 'absences',
+      action: "create",
+      resource: "absences",
       resourceId: absenceId,
       description: `Создана заявка на отсутствие #${absenceId}`,
       ipAddress: req?.clientIP,
       userAgent: req?.userAgent,
-      metadata: { absenceId }
+      metadata: { absenceId },
     });
   }
 
   static async logAbsenceApproved(adminId, absenceId, req) {
     return this.log({
       adminId,
-      action: 'approve',
-      resource: 'absences',
+      action: "approve",
+      resource: "absences",
       resourceId: absenceId,
       description: `Одобрена заявка на отсутствие #${absenceId}`,
-      oldValues: { status: 'pending' },
-      newValues: { status: 'approved' },
+      oldValues: { status: "pending" },
+      newValues: { status: "approved" },
       ipAddress: req?.clientIP,
       userAgent: req?.userAgent,
-      metadata: { absenceId, action: 'approve' }
+      metadata: { absenceId, action: "approve" },
     });
   }
 
   static async logAbsenceRejected(adminId, absenceId, reason, req) {
     return this.log({
       adminId,
-      action: 'reject',
-      resource: 'absences',
+      action: "reject",
+      resource: "absences",
       resourceId: absenceId,
       description: `Отклонена заявка на отсутствие #${absenceId}. Причина: ${reason}`,
-      oldValues: { status: 'pending' },
-      newValues: { status: 'rejected', rejectionReason: reason },
+      oldValues: { status: "pending" },
+      newValues: { status: "rejected", rejectionReason: reason },
       ipAddress: req?.clientIP,
       userAgent: req?.userAgent,
-      metadata: { absenceId, action: 'reject', reason }
+      metadata: { absenceId, action: "reject", reason },
     });
   }
 
   static async logAbsenceDeleted(adminId, absenceId, req) {
     return this.log({
       adminId,
-      action: 'delete',
-      resource: 'absences',
+      action: "delete",
+      resource: "absences",
       resourceId: absenceId,
       description: `Удалена заявка на отсутствие #${absenceId}`,
       ipAddress: req?.clientIP,
       userAgent: req?.userAgent,
-      metadata: { absenceId }
+      metadata: { absenceId },
     });
   }
 }
 
-module.exports = AuditLogger; 
+module.exports = AuditLogger;

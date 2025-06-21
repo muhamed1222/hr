@@ -1,13 +1,17 @@
-const express = require('express');
-const { Team, User, UserTeam, WorkLog } = require('../models');
-const { Op } = require('sequelize');
-const { 
-  authenticateToken, 
-  requireRole, 
-  requireTeamAccess, 
-  logRequestInfo 
-} = require('../middleware/auth');
-const AuditLogger = require('../utils/auditLogger');
+"use strict";
+
+const { _info, _error, _warn, _debug } = require("../utils/logger");
+
+const _express = require("express");
+const { Team, User, UserTeam, WorkLog } = require("../models");
+const { Op } = require("sequelize");
+const {
+  authenticateToken,
+  requireRole,
+  requireTeamAccess,
+  logRequestInfo,
+} = require("../middleware/auth");
+const _AuditLogger = require("../utils/auditLogger");
 
 const router = express.Router();
 
@@ -18,16 +22,16 @@ router.use(authenticateToken);
 /**
  * Получить все команды с фильтрацией
  */
-router.get('/', requireRole(['admin', 'manager']), async (req, res) => {
+router.get("/", requireRole(["admin", "manager"]), async (req, res) => {
   try {
     const {
-      search = '',
-      status = '',
-      managerId = '',
+      search = "",
+      status = "",
+      managerId = "",
       page = 1,
-      limit = 20,
-      sortBy = 'createdAt',
-      sortOrder = 'DESC'
+      limit = LIMITS.DEFAULT_PAGE_SIZE,
+      sortBy = "createdAt",
+      sortOrder = "DESC",
     } = req.query;
 
     const whereClause = {};
@@ -48,7 +52,7 @@ router.get('/', requireRole(['admin', 'manager']), async (req, res) => {
     }
 
     // Менеджеры видят только свои команды
-    if (req.user.role === 'manager') {
+    if (req.user.role === "manager") {
       whereClause.managerId = req.user.id;
     }
 
@@ -59,43 +63,45 @@ router.get('/', requireRole(['admin', 'manager']), async (req, res) => {
       include: [
         {
           model: User,
-          as: 'manager',
-          attributes: ['id', 'name', 'username'],
-          required: false
+          as: "manager",
+          attributes: ["id", "name", "username"],
+          required: false,
         },
         {
           model: User,
-          as: 'members',
+          as: "members",
           through: {
-            where: { status: 'active' },
-            attributes: ['role', 'joinedAt']
+            where: { status: "active" },
+            attributes: ["role", "joinedAt"],
           },
-          attributes: ['id', 'name', 'username', 'role', 'status'],
-          required: false
-        }
+          attributes: ["id", "name", "username", "role", "status"],
+          required: false,
+        },
       ],
       order: [[sortBy, sortOrder.toUpperCase()]],
       limit: parseInt(limit),
       offset: offset,
-      distinct: true
+      distinct: true,
     });
 
     // Добавляем статистику для каждой команды
-    const teamsWithStats = await Promise.all(teams.map(async (team) => {
-      const teamJson = team.toJSON();
-      
-      // Подсчитываем количество участников
-      teamJson.memberCount = teamJson.members.length;
-      
-      // Статистика по ролям
-      teamJson.membersByRole = teamJson.members.reduce((acc, member) => {
-        const role = member.UserTeam.role;
-        acc[role] = (acc[role] || 0) + 1;
-        return acc;
-      }, {});
+    const teamsWithStats = await Promise.all(
+      teams.map(async (team) => {
+        const teamJson = team.toJSON();
 
-      return teamJson;
-    }));
+        // Подсчитываем количество участников
+        teamJson.memberCount = teamJson.members.length;
+
+        // Статистика по ролям
+        teamJson.membersByRole = teamJson.members.reduce((acc, member) => {
+          const role = member.UserTeam.role;
+          acc[role] = (acc[role] || 0) + 1;
+          return acc;
+        }, {});
+
+        return teamJson;
+      }),
+    );
 
     res.json({
       success: true,
@@ -104,15 +110,14 @@ router.get('/', requireRole(['admin', 'manager']), async (req, res) => {
         page: parseInt(page),
         limit: parseInt(limit),
         total: count,
-        pages: Math.ceil(count / limit)
-      }
+        pages: Math.ceil(count / limit),
+      },
     });
-
   } catch (error) {
-    console.error('Ошибка получения команд:', error);
-    res.status(500).json({
+    _error("Ошибка получения команд:", error);
+    res.status(LIMITS.DEFAULT_PAGE_SIZE0).json({
       success: false,
-      message: 'Ошибка получения данных команд'
+      message: "Ошибка получения данных команд",
     });
   }
 });
@@ -120,7 +125,7 @@ router.get('/', requireRole(['admin', 'manager']), async (req, res) => {
 /**
  * Получить конкретную команду
  */
-router.get('/:id', requireTeamAccess, async (req, res) => {
+router.get("/:id", requireTeamAccess, async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -128,37 +133,43 @@ router.get('/:id', requireTeamAccess, async (req, res) => {
       include: [
         {
           model: User,
-          as: 'manager',
-          attributes: ['id', 'name', 'username', 'role']
+          as: "manager",
+          attributes: ["id", "name", "username", "role"],
         },
         {
           model: User,
-          as: 'members',
+          as: "members",
           through: {
-            attributes: ['role', 'joinedAt', 'status']
+            attributes: ["role", "joinedAt", "status"],
           },
-          attributes: ['id', 'name', 'username', 'role', 'status', 'telegramId']
-        }
-      ]
+          attributes: [
+            "id",
+            "name",
+            "username",
+            "role",
+            "status",
+            "telegramId",
+          ],
+        },
+      ],
     });
 
     if (!team) {
-      return res.status(404).json({
+      return res.status(HTTP_STATUS_CODES.NOT_FOUND).json({
         success: false,
-        message: 'Команда не найдена'
+        message: "Команда не найдена",
       });
     }
 
     res.json({
       success: true,
-      data: team
+      data: team,
     });
-
   } catch (error) {
-    console.error('Ошибка получения команды:', error);
-    res.status(500).json({
+    _error("Ошибка получения команды:", error);
+    res.status(LIMITS.DEFAULT_PAGE_SIZE0).json({
       success: false,
-      message: 'Ошибка получения данных команды'
+      message: "Ошибка получения данных команды",
     });
   }
 });
@@ -166,30 +177,30 @@ router.get('/:id', requireTeamAccess, async (req, res) => {
 /**
  * Создать новую команду
  */
-router.post('/', requireRole(['admin']), async (req, res) => {
+router.post("/", requireRole(["admin"]), async (req, res) => {
   try {
-    const { 
-      name, 
-      description = '', 
-      managerId = null, 
+    const {
+      name,
+      description = "",
+      managerId = null,
       settings = {},
-      members = [] 
+      members = [],
     } = req.body;
 
     // Валидация
     if (!name) {
-      return res.status(400).json({
+      return res.status(HTTP_STATUS_CODES.BAD_REQUEST).json({
         success: false,
-        message: 'Название команды обязательно'
+        message: "Название команды обязательно",
       });
     }
 
     // Проверяем уникальность названия
     const existingTeam = await Team.findOne({ where: { name } });
     if (existingTeam) {
-      return res.status(400).json({
+      return res.status(HTTP_STATUS_CODES.BAD_REQUEST).json({
         success: false,
-        message: 'Команда с таким названием уже существует'
+        message: "Команда с таким названием уже существует",
       });
     }
 
@@ -197,16 +208,16 @@ router.post('/', requireRole(['admin']), async (req, res) => {
     if (managerId) {
       const manager = await User.findByPk(managerId);
       if (!manager) {
-        return res.status(400).json({
+        return res.status(HTTP_STATUS_CODES.BAD_REQUEST).json({
           success: false,
-          message: 'Указанный менеджер не найден'
+          message: "Указанный менеджер не найден",
         });
       }
 
-      if (!['manager', 'admin'].includes(manager.role)) {
-        return res.status(400).json({
+      if (!["manager", "admin"].includes(manager.role)) {
+        return res.status(HTTP_STATUS_CODES.BAD_REQUEST).json({
           success: false,
-          message: 'Пользователь не может быть менеджером команды'
+          message: "Пользователь не может быть менеджером команды",
         });
       }
     }
@@ -214,12 +225,12 @@ router.post('/', requireRole(['admin']), async (req, res) => {
     const defaultSettings = {
       reminders_enabled: true,
       work_hours: {
-        start: '09:00',
-        end: '18:00',
-        lunch_duration: 60
+        start: "09:00",
+        end: "18:00",
+        lunch_duration: 60,
       },
-      timezone: 'Europe/Moscow',
-      ...settings
+      timezone: "Europe/Moscow",
+      ...settings,
     };
 
     const newTeam = await Team.create({
@@ -227,16 +238,16 @@ router.post('/', requireRole(['admin']), async (req, res) => {
       description,
       managerId,
       settings: defaultSettings,
-      status: 'active'
+      status: "active",
     });
 
     // Добавляем участников
     if (members.length > 0) {
-      const teamMemberships = members.map(member => ({
-        userId: typeof member === 'object' ? member.userId : member,
+      const teamMemberships = members.map((member) => ({
+        userId: typeof member === "object" ? member.userId : member,
         teamId: newTeam.id,
-        role: typeof member === 'object' ? (member.role || 'member') : 'member',
-        status: 'active'
+        role: typeof member === "object" ? member.role || "member" : "member",
+        status: "active",
       }));
 
       await UserTeam.bulkCreate(teamMemberships);
@@ -250,29 +261,28 @@ router.post('/', requireRole(['admin']), async (req, res) => {
       include: [
         {
           model: User,
-          as: 'manager',
-          attributes: ['id', 'name', 'username']
+          as: "manager",
+          attributes: ["id", "name", "username"],
         },
         {
           model: User,
-          as: 'members',
-          through: { attributes: ['role'] },
-          attributes: ['id', 'name', 'username']
-        }
-      ]
+          as: "members",
+          through: { attributes: ["role"] },
+          attributes: ["id", "name", "username"],
+        },
+      ],
     });
 
-    res.status(201).json({
+    res.status(HTTP_STATUS_CODES.CREATED).json({
       success: true,
       data: teamWithMembers,
-      message: 'Команда успешно создана'
+      message: "Команда успешно создана",
     });
-
   } catch (error) {
-    console.error('Ошибка создания команды:', error);
-    res.status(500).json({
+    _error("Ошибка создания команды:", error);
+    res.status(LIMITS.DEFAULT_PAGE_SIZE0).json({
       success: false,
-      message: 'Ошибка создания команды'
+      message: "Ошибка создания команды",
     });
   }
 });
@@ -280,16 +290,16 @@ router.post('/', requireRole(['admin']), async (req, res) => {
 /**
  * Обновить команду
  */
-router.patch('/:id', requireRole(['admin']), async (req, res) => {
+router.patch("/:id", requireRole(["admin"]), async (req, res) => {
   try {
     const { id } = req.params;
     const updates = req.body;
 
     const team = await Team.findByPk(id);
     if (!team) {
-      return res.status(404).json({
+      return res.status(HTTP_STATUS_CODES.NOT_FOUND).json({
         success: false,
-        message: 'Команда не найдена'
+        message: "Команда не найдена",
       });
     }
 
@@ -298,17 +308,17 @@ router.patch('/:id', requireRole(['admin']), async (req, res) => {
 
     // Проверяем уникальность названия
     if (updates.name && updates.name !== team.name) {
-      const existingTeam = await Team.findOne({ 
-        where: { 
+      const existingTeam = await Team.findOne({
+        where: {
           name: updates.name,
-          id: { [Op.ne]: id }
-        } 
+          id: { [Op.ne]: id },
+        },
       });
-      
+
       if (existingTeam) {
-        return res.status(400).json({
+        return res.status(HTTP_STATUS_CODES.BAD_REQUEST).json({
           success: false,
-          message: 'Команда с таким названием уже существует'
+          message: "Команда с таким названием уже существует",
         });
       }
     }
@@ -317,16 +327,16 @@ router.patch('/:id', requireRole(['admin']), async (req, res) => {
     if (updates.managerId) {
       const manager = await User.findByPk(updates.managerId);
       if (!manager) {
-        return res.status(400).json({
+        return res.status(HTTP_STATUS_CODES.BAD_REQUEST).json({
           success: false,
-          message: 'Указанный менеджер не найден'
+          message: "Указанный менеджер не найден",
         });
       }
 
-      if (!['manager', 'admin'].includes(manager.role)) {
-        return res.status(400).json({
+      if (!["manager", "admin"].includes(manager.role)) {
+        return res.status(HTTP_STATUS_CODES.BAD_REQUEST).json({
           success: false,
-          message: 'Пользователь не может быть менеджером команды'
+          message: "Пользователь не может быть менеджером команды",
         });
       }
     }
@@ -336,43 +346,42 @@ router.patch('/:id', requireRole(['admin']), async (req, res) => {
     // Логируем изменения
     await AuditLogger.log({
       adminId: req.user.id,
-      action: 'update',
-      resource: 'teams',
+      action: "update",
+      resource: "teams",
       resourceId: id,
       description: `Обновлена команда: ${team.name}`,
       oldValues,
       newValues: updates,
       ipAddress: req.clientIP,
-      userAgent: req.userAgent
+      userAgent: req.userAgent,
     });
 
     const updatedTeam = await Team.findByPk(id, {
       include: [
         {
           model: User,
-          as: 'manager',
-          attributes: ['id', 'name', 'username']
+          as: "manager",
+          attributes: ["id", "name", "username"],
         },
         {
           model: User,
-          as: 'members',
-          through: { attributes: ['role'] },
-          attributes: ['id', 'name', 'username']
-        }
-      ]
+          as: "members",
+          through: { attributes: ["role"] },
+          attributes: ["id", "name", "username"],
+        },
+      ],
     });
 
     res.json({
       success: true,
       data: updatedTeam,
-      message: 'Команда успешно обновлена'
+      message: "Команда успешно обновлена",
     });
-
   } catch (error) {
-    console.error('Ошибка обновления команды:', error);
-    res.status(500).json({
+    _error("Ошибка обновления команды:", error);
+    res.status(LIMITS.DEFAULT_PAGE_SIZE0).json({
       success: false,
-      message: 'Ошибка обновления команды'
+      message: "Ошибка обновления команды",
     });
   }
 });
@@ -380,47 +389,46 @@ router.patch('/:id', requireRole(['admin']), async (req, res) => {
 /**
  * Деактивировать команду
  */
-router.delete('/:id', requireRole(['admin']), async (req, res) => {
+router.delete("/:id", requireRole(["admin"]), async (req, res) => {
   try {
     const { id } = req.params;
 
     const team = await Team.findByPk(id);
     if (!team) {
-      return res.status(404).json({
+      return res.status(HTTP_STATUS_CODES.NOT_FOUND).json({
         success: false,
-        message: 'Команда не найдена'
+        message: "Команда не найдена",
       });
     }
 
-    await team.update({ status: 'inactive' });
+    await team.update({ status: "inactive" });
 
     // Деактивируем всех участников команды
     await UserTeam.update(
-      { status: 'inactive', leftAt: new Date() },
-      { where: { teamId: id, status: 'active' } }
+      { status: "inactive", leftAt: new Date() },
+      { where: { teamId: id, status: "active" } },
     );
 
     // Логируем деактивацию
     await AuditLogger.log({
       adminId: req.user.id,
-      action: 'deactivate',
-      resource: 'teams',
+      action: "deactivate",
+      resource: "teams",
       resourceId: id,
       description: `Деактивирована команда: ${team.name}`,
       ipAddress: req.clientIP,
-      userAgent: req.userAgent
+      userAgent: req.userAgent,
     });
 
     res.json({
       success: true,
-      message: 'Команда успешно деактивирована'
+      message: "Команда успешно деактивирована",
     });
-
   } catch (error) {
-    console.error('Ошибка деактивации команды:', error);
-    res.status(500).json({
+    _error("Ошибка деактивации команды:", error);
+    res.status(LIMITS.DEFAULT_PAGE_SIZE0).json({
       success: false,
-      message: 'Ошибка деактивации команды'
+      message: "Ошибка деактивации команды",
     });
   }
 });
@@ -428,36 +436,36 @@ router.delete('/:id', requireRole(['admin']), async (req, res) => {
 /**
  * Добавить участника в команду
  */
-router.post('/:id/members', requireRole(['admin']), async (req, res) => {
+router.post("/:id/members", requireRole(["admin"]), async (req, res) => {
   try {
     const { id } = req.params;
-    const { userId, role = 'member' } = req.body;
+    const { userId, role = "member" } = req.body;
 
     const team = await Team.findByPk(id);
     if (!team) {
-      return res.status(404).json({
+      return res.status(HTTP_STATUS_CODES.NOT_FOUND).json({
         success: false,
-        message: 'Команда не найдена'
+        message: "Команда не найдена",
       });
     }
 
     const user = await User.findByPk(userId);
     if (!user) {
-      return res.status(404).json({
+      return res.status(HTTP_STATUS_CODES.NOT_FOUND).json({
         success: false,
-        message: 'Пользователь не найден'
+        message: "Пользователь не найден",
       });
     }
 
     // Проверяем, не является ли пользователь уже участником
     const existingMembership = await UserTeam.findOne({
-      where: { userId, teamId: id, status: 'active' }
+      where: { userId, teamId: id, status: "active" },
     });
 
     if (existingMembership) {
-      return res.status(400).json({
+      return res.status(HTTP_STATUS_CODES.BAD_REQUEST).json({
         success: false,
-        message: 'Пользователь уже является участником этой команды'
+        message: "Пользователь уже является участником этой команды",
       });
     }
 
@@ -465,21 +473,26 @@ router.post('/:id/members', requireRole(['admin']), async (req, res) => {
       userId,
       teamId: id,
       role,
-      status: 'active'
+      status: "active",
     });
 
-    await AuditLogger.logTeamMembershipChanged(req.user.id, id, userId, 'add', req);
+    await AuditLogger.logTeamMembershipChanged(
+      req.user.id,
+      id,
+      userId,
+      "add",
+      req,
+    );
 
     res.json({
       success: true,
-      message: 'Участник добавлен в команду'
+      message: "Участник добавлен в команду",
     });
-
   } catch (error) {
-    console.error('Ошибка добавления участника:', error);
-    res.status(500).json({
+    _error("Ошибка добавления участника:", error);
+    res.status(LIMITS.DEFAULT_PAGE_SIZE0).json({
       success: false,
-      message: 'Ошибка добавления участника'
+      message: "Ошибка добавления участника",
     });
   }
 });
@@ -487,121 +500,135 @@ router.post('/:id/members', requireRole(['admin']), async (req, res) => {
 /**
  * Удалить участника из команды
  */
-router.delete('/:id/members/:userId', requireRole(['admin']), async (req, res) => {
-  try {
-    const { id, userId } = req.params;
+router.delete(
+  "/:id/members/:userId",
+  requireRole(["admin"]),
+  async (req, res) => {
+    try {
+      const { id, userId } = req.params;
 
-    const membership = await UserTeam.findOne({
-      where: { userId, teamId: id, status: 'active' }
-    });
+      const membership = await UserTeam.findOne({
+        where: { userId, teamId: id, status: "active" },
+      });
 
-    if (!membership) {
-      return res.status(404).json({
+      if (!membership) {
+        return res.status(HTTP_STATUS_CODES.NOT_FOUND).json({
+          success: false,
+          message: "Пользователь не является участником этой команды",
+        });
+      }
+
+      await membership.update({ status: "inactive", leftAt: new Date() });
+
+      await AuditLogger.logTeamMembershipChanged(
+        req.user.id,
+        id,
+        userId,
+        "remove",
+        req,
+      );
+
+      res.json({
+        success: true,
+        message: "Участник удалён из команды",
+      });
+    } catch (error) {
+      _error("Ошибка удаления участника:", error);
+      res.status(LIMITS.DEFAULT_PAGE_SIZE0).json({
         success: false,
-        message: 'Пользователь не является участником этой команды'
+        message: "Ошибка удаления участника",
       });
     }
-
-    await membership.update({ status: 'inactive', leftAt: new Date() });
-
-    await AuditLogger.logTeamMembershipChanged(req.user.id, id, userId, 'remove', req);
-
-    res.json({
-      success: true,
-      message: 'Участник удалён из команды'
-    });
-
-  } catch (error) {
-    console.error('Ошибка удаления участника:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Ошибка удаления участника'
-    });
-  }
-});
+  },
+);
 
 /**
  * Изменить роль участника в команде
  */
-router.patch('/:id/members/:userId', requireRole(['admin']), async (req, res) => {
-  try {
-    const { id, userId } = req.params;
-    const { role } = req.body;
+router.patch(
+  "/:id/members/:userId",
+  requireRole(["admin"]),
+  async (req, res) => {
+    try {
+      const { id, userId } = req.params;
+      const { role } = req.body;
 
-    if (!role || !['member', 'lead', 'manager'].includes(role)) {
-      return res.status(400).json({
+      if (!role || !["member", "lead", "manager"].includes(role)) {
+        return res.status(HTTP_STATUS_CODES.BAD_REQUEST).json({
+          success: false,
+          message: "Некорректная роль",
+        });
+      }
+
+      const membership = await UserTeam.findOne({
+        where: { userId, teamId: id, status: "active" },
+      });
+
+      if (!membership) {
+        return res.status(HTTP_STATUS_CODES.NOT_FOUND).json({
+          success: false,
+          message: "Пользователь не является участником этой команды",
+        });
+      }
+
+      const oldRole = membership.role;
+      await membership.update({ role });
+
+      await AuditLogger.log({
+        adminId: req.user.id,
+        userId: parseInt(userId),
+        action: "update_team_role",
+        resource: "teams",
+        resourceId: id,
+        description: `Изменена роль в команде с ${oldRole} на ${role}`,
+        oldValues: { role: oldRole },
+        newValues: { role },
+        ipAddress: req.clientIP,
+        userAgent: req.userAgent,
+        metadata: { teamId: id },
+      });
+
+      res.json({
+        success: true,
+        message: "Роль участника обновлена",
+      });
+    } catch (error) {
+      _error("Ошибка изменения роли:", error);
+      res.status(LIMITS.DEFAULT_PAGE_SIZE0).json({
         success: false,
-        message: 'Некорректная роль'
+        message: "Ошибка изменения роли",
       });
     }
-
-    const membership = await UserTeam.findOne({
-      where: { userId, teamId: id, status: 'active' }
-    });
-
-    if (!membership) {
-      return res.status(404).json({
-        success: false,
-        message: 'Пользователь не является участником этой команды'
-      });
-    }
-
-    const oldRole = membership.role;
-    await membership.update({ role });
-
-    await AuditLogger.log({
-      adminId: req.user.id,
-      userId: parseInt(userId),
-      action: 'update_team_role',
-      resource: 'teams',
-      resourceId: id,
-      description: `Изменена роль в команде с ${oldRole} на ${role}`,
-      oldValues: { role: oldRole },
-      newValues: { role },
-      ipAddress: req.clientIP,
-      userAgent: req.userAgent,
-      metadata: { teamId: id }
-    });
-
-    res.json({
-      success: true,
-      message: 'Роль участника обновлена'
-    });
-
-  } catch (error) {
-    console.error('Ошибка изменения роли:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Ошибка изменения роли'
-    });
-  }
-});
+  },
+);
 
 /**
  * Получить статистику команды
  */
-router.get('/:id/stats', requireTeamAccess, async (req, res) => {
+router.get("/:id/stats", requireTeamAccess, async (req, res) => {
   try {
     const { id } = req.params;
     const { startDate, endDate } = req.query;
 
     const team = await Team.findByPk(id, {
-      include: [{
-        model: User,
-        as: 'members',
-        through: { where: { status: 'active' } },
-        attributes: ['id']
-      }]
+      include: [
+        {
+          model: User,
+          as: "members",
+          through: { where: { status: "active" } },
+          attributes: ["id"],
+        },
+      ],
     });
 
     if (!team) {
-      return res.status(404).json({
+      return res.status(HTTP_STATUS_CODES.NOT_FOUND).json({
         success: false,
-        message: 'Команда не найдена'
+        message: "Команда не найдена",
       });
     }
 
-    const memberIds = team.members.map(member => member.id);
+    const memberIds = team.members.map((member) => member.id);
 
     if (memberIds.length === 0) {
       return res.json({
@@ -609,56 +636,77 @@ router.get('/:id/stats', requireTeamAccess, async (req, res) => {
         data: {
           team: { id: team.id, name: team.name },
           memberCount: 0,
-          stats: {}
-        }
+          stats: {},
+        },
       });
     }
 
     const whereClause = { userId: { [Op.in]: memberIds } };
-    
+
     if (startDate && endDate) {
       whereClause.workDate = {
-        [Op.between]: [startDate, endDate]
+        [Op.between]: [startDate, endDate],
       };
     }
 
     const workLogs = await WorkLog.findAll({
       where: whereClause,
-      include: [{
-        model: User,
-        as: 'user',
-        attributes: ['id', 'name', 'username']
-      }]
+      include: [
+        {
+          model: User,
+          as: "user",
+          attributes: ["id", "name", "username"],
+        },
+      ],
     });
 
     // Статистика команды
     const stats = {
       totalWorkDays: workLogs.length,
-      totalWorkHours: workLogs.reduce((sum, log) => sum + (log.totalMinutes || 0), 0) / 60,
-      averageWorkHours: workLogs.length > 0 ? 
-        (workLogs.reduce((sum, log) => sum + (log.totalMinutes || 0), 0) / 60 / workLogs.length).toFixed(1) : 0,
-      
+      totalWorkHours:
+        workLogs.reduce((sum, log) => sum + (log.totalMinutes || 0), 0) / 60,
+      averageWorkHours:
+        workLogs.length > 0
+          ? (
+              workLogs.reduce((sum, log) => sum + (log.totalMinutes || 0), 0) /
+              60 /
+              workLogs.length
+            ).toFixed(1)
+          : 0,
+
       workModeDistribution: {
-        office: workLogs.filter(log => log.workMode === 'office').length,
-        remote: workLogs.filter(log => log.workMode === 'remote').length,
-        sick: workLogs.filter(log => log.workMode === 'sick').length,
-        vacation: workLogs.filter(log => log.workMode === 'vacation').length
+        office: workLogs.filter((log) => log.workMode === "office").length,
+        remote: workLogs.filter((log) => log.workMode === "remote").length,
+        sick: workLogs.filter((log) => log.workMode === "sick").length,
+        vacation: workLogs.filter((log) => log.workMode === "vacation").length,
       },
 
-      memberStats: memberIds.map(memberId => {
-        const memberLogs = workLogs.filter(log => log.userId === memberId);
+      memberStats: memberIds.map((memberId) => {
+        const memberLogs = workLogs.filter((log) => log.userId === memberId);
         const user = memberLogs[0]?.user;
-        
+
         return {
           userId: memberId,
-          name: user?.name || 'Unknown',
-          username: user?.username || 'unknown',
+          name: user?.name || "Unknown",
+          username: user?.username || "unknown",
           workDays: memberLogs.length,
-          totalHours: (memberLogs.reduce((sum, log) => sum + (log.totalMinutes || 0), 0) / 60).toFixed(1),
-          averageHours: memberLogs.length > 0 ? 
-            (memberLogs.reduce((sum, log) => sum + (log.totalMinutes || 0), 0) / 60 / memberLogs.length).toFixed(1) : 0
+          totalHours: (
+            memberLogs.reduce((sum, log) => sum + (log.totalMinutes || 0), 0) /
+            60
+          ).toFixed(1),
+          averageHours:
+            memberLogs.length > 0
+              ? (
+                  memberLogs.reduce(
+                    (sum, log) => sum + (log.totalMinutes || 0),
+                    0,
+                  ) /
+                  60 /
+                  memberLogs.length
+                ).toFixed(1)
+              : 0,
         };
-      })
+      }),
     };
 
     res.json({
@@ -666,15 +714,14 @@ router.get('/:id/stats', requireTeamAccess, async (req, res) => {
       data: {
         team: { id: team.id, name: team.name },
         memberCount: memberIds.length,
-        stats
-      }
+        stats,
+      },
     });
-
   } catch (error) {
-    console.error('Ошибка получения статистики команды:', error);
-    res.status(500).json({
+    _error("Ошибка получения статистики команды:", error);
+    res.status(LIMITS.DEFAULT_PAGE_SIZE0).json({
       success: false,
-      message: 'Ошибка получения статистики'
+      message: "Ошибка получения статистики",
     });
   }
 });
@@ -682,28 +729,27 @@ router.get('/:id/stats', requireTeamAccess, async (req, res) => {
 /**
  * Получить доступные команды для назначения менеджерам
  */
-router.get('/available/managers', requireRole(['admin']), async (req, res) => {
+router.get("/available/managers", requireRole(["admin"]), async (req, res) => {
   try {
     const managers = await User.findAll({
       where: {
-        role: { [Op.in]: ['manager', 'admin'] },
-        status: 'active'
+        role: { [Op.in]: ["manager", "admin"] },
+        status: "active",
       },
-      attributes: ['id', 'name', 'username', 'role']
+      attributes: ["id", "name", "username", "role"],
     });
 
     res.json({
       success: true,
-      data: managers
+      data: managers,
     });
-
   } catch (error) {
-    console.error('Ошибка получения менеджеров:', error);
-    res.status(500).json({
+    _error("Ошибка получения менеджеров:", error);
+    res.status(LIMITS.DEFAULT_PAGE_SIZE0).json({
       success: false,
-      message: 'Ошибка получения списка менеджеров'
+      message: "Ошибка получения списка менеджеров",
     });
   }
 });
 
-module.exports = router; 
+module.exports = router;

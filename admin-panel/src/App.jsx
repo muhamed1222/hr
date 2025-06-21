@@ -16,8 +16,6 @@ import EmployeeProfile from '@/pages/EmployeeProfile'
 import EmployeeList from '@/pages/EmployeeList'
 import Analytics from '@/pages/Analytics'
 import WorkLogs from '@/pages/WorkLogs'
-import Absences from '@/pages/Absences'
-import SystemConfig from '@/pages/SystemConfig'
 import TelegramApp from '@/components/TelegramApp'
 import TelegramDeepLink from '@/components/TelegramDeepLink'
 import DevModeToggle, { DevModeFloatingToggle } from '@/components/DevModeToggle'
@@ -29,8 +27,6 @@ import { useEffect } from 'react'
 import { initTelegramApp, isInsideTelegram } from '@/lib/telegram'
 import { useTelegramStartParam } from '@/hooks/useTelegramStartParam'
 import TelegramWebAppTesting from '@/pages/TelegramWebAppTesting'
-import OrganizationSettings from './pages/OrganizationSettings'
-import SystemMonitoring from './pages/SystemMonitoring'
 
 // Создаём клиент React Query
 const queryClient = new QueryClient({
@@ -243,83 +239,9 @@ function App() {
             />
 
             <Route
-              path="/absences"
-              element={
-                <ProtectedRoute>
-                  <Layout>
-                    <Absences />
-                  </Layout>
-                </ProtectedRoute>
-              }
-            />
-
-            {/* Системные настройки (только для админов) */}
-                        <Route 
-              path="/system-config" 
-              element={
-                <ProtectedRoute requiredRole="admin">
-                  <Layout>
-                    <SystemConfig />
-                  </Layout>
-                </ProtectedRoute>
-              } 
-            />
-            
-            <Route 
-              path="/organization-settings" 
-              element={
-                <ProtectedRoute requiredRole="admin">
-                  <Layout>
-                    <OrganizationSettings />
-                  </Layout>
-                </ProtectedRoute>
-              } 
-            />
-            
-            <Route 
-              path="/system-monitoring" 
-              element={
-                <ProtectedRoute requiredRole="admin">
-                  <Layout>
-                    <SystemMonitoring />
-                  </Layout>
-                </ProtectedRoute>
-              } 
-            />
-            
-            <Route
-              path="/settings"
-              element={
-                <ProtectedRoute>
-                  <Layout>
-                    <div className="space-y-6">
-                      <div>
-                        <h2 className="text-2xl font-bold text-gray-900">Настройки</h2>
-                        <p className="text-gray-600 mt-2">Конфигурация системы и интеграций</p>
-                      </div>
-                      
-                      {/* Профиль пользователя */}
-                      <TelegramAuthStatus variant="profile" />
-                      
-                      {/* Ссылка на тестирование WebApp */}
-                      <TelegramTestingLink />
-                      
-                      {/* Dev Mode Toggle для разработчиков */}
-                      <DevModeToggle />
-                      
-                      <DeepLinkTester />
-                      <DeepLinkDemo />
-                      <TelegramDemo />
-                    </div>
-                  </Layout>
-                </ProtectedRoute>
-              }
-            />
-
-            <Route
               path="/telegram-admin"
               element={
-                <ProtectedRoute>
+                <ProtectedRoute role="admin">
                   <TelegramAdmin />
                 </ProtectedRoute>
               }

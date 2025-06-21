@@ -1,13 +1,19 @@
-const { sendTelegramMessage } = require('../utils/sendTelegramMessage');
-const { info } = require('../utils/logger');
+"use strict";
 
-const WEB_APP_URL = process.env.WEB_APP_URL || 'http://localhost:5173';
+const { _info, _error, _warn, _debug } = require("../utils/logger");
+
+const { _sendTelegramMessage } = require("../utils/sendTelegramMessage");
+
+const WEB_APP_URL = process.env.WEB_APP_URL || "http://localhost:5173";
 
 /**
  * Проверяет можно ли использовать URL в Telegram кнопках
  */
 function canUseUrlInTelegram(url) {
-  return !url.includes('localhost') && (url.startsWith('https://') || process.env.NODE_ENV === 'development');
+  return (
+    !url.includes("localhost") &&
+    (url.startsWith("https://") || process.env.NODE_ENV === "development")
+  );
 }
 
 /**
@@ -17,26 +23,28 @@ function canUseUrlInTelegram(url) {
 async function notifyLogEdited(payload) {
   const { workLog, editedBy, user, changes } = payload;
 
-  const dateStr = new Date(workLog.workDate).toLocaleDateString('ru-RU');
-  
+  const dateStr = new Date(workLog.workDate).toLocaleDateString("ru-RU");
+
   // Формируем список изменений
-  const changesList = Object.keys(changes).map(field => {
-    const fieldNames = {
-      arrivedAt: 'Время прихода',
-      leftAt: 'Время ухода',
-      lunchStart: 'Начало обеда',
-      lunchEnd: 'Окончание обеда',
-      workMode: 'Режим работы',
-      dailyReport: 'Отчёт о работе',
-      problems: 'Проблемы'
-    };
-    
-    const fieldName = fieldNames[field] || field;
-    const oldValue = changes[field].old || 'не указано';
-    const newValue = changes[field].new || 'не указано';
-    
-    return `• <b>${fieldName}:</b>\n  Было: ${oldValue}\n  Стало: ${newValue}`;
-  }).join('\n\n');
+  const changesList = Object.keys(changes)
+    .map((field) => {
+      const fieldNames = {
+        arrivedAt: "Время прихода",
+        leftAt: "Время ухода",
+        lunchStart: "Начало обеда",
+        lunchEnd: "Окончание обеда",
+        workMode: "Режим работы",
+        dailyReport: "Отчёт о работе",
+        problems: "Проблемы",
+      };
+
+      const fieldName = fieldNames[field] || field;
+      const oldValue = changes[field].old || "не указано";
+      const newValue = changes[field].new || "не указано";
+
+      return `• <b>${fieldName}:</b>\n  Было: ${oldValue}\n  Стало: ${newValue}`;
+    })
+    .join("\n\n");
 
   // Уведомление сотруднику
   if (user.telegramId) {
@@ -44,62 +52,63 @@ async function notifyLogEdited(payload) {
 ✏️ <b>Ваш рабочий день отредактирован</b>
 
 📅 <b>Дата:</b> ${dateStr}
-👤 <b>Редактировал:</b> ${editedBy.firstName} ${editedBy.lastName || ''} (${editedBy.role})
+👤 <b>Редактировал:</b> ${editedBy.firstName} ${editedBy.lastName || ""} (${editedBy.role})
 
 <b>Изменения:</b>
 ${changesList}
 
 ℹ️ Если у вас есть вопросы по изменениям, обратитесь к своему менеджеру.
-${!canUseUrlInTelegram(WEB_APP_URL) ? '\n🔗 Веб-интерфейс будет доступен после настройки публичного URL.' : ''}
+${!canUseUrlInTelegram(WEB_APP_URL) ? "\n🔗 Веб-интерфейс будет доступен после настройки публичного URL." : ""}
     `.trim();
 
     const userOptions = {
-      parse_mode: 'HTML'
+      parse_mode: "HTML",
     };
 
     if (canUseUrlInTelegram(WEB_APP_URL)) {
       userOptions.reply_markup = {
         inline_keyboard: [
           [
-            { 
-              text: '📊 Посмотреть мои логи', 
-              url: `${WEB_APP_URL}?page=logs` 
-            }
+            {
+              text: "📊 Посмотреть мои логи",
+              url: `${WEB_APP_URL}?page=logs`,
+            },
           ],
           [
             {
-              text: '📅 Этот день',
-              url: `${WEB_APP_URL}?page=logs&date=${workLog.workDate}`
-            }
-          ]
-        ]
+              text: "📅 Этот день",
+              url: `${WEB_APP_URL}?page=logs&date=${workLog.workDate}`,
+            },
+          ],
+        ],
       };
     }
 
-    await sendTelegramMessage(user.telegramId, userMessage, userOptions);
+    await _sendTelegramMessage(user.telegramId, userMessage, userOptions);
   }
 
   // Уведомление другим менеджерам (если редактировал не менеджер сотрудника)
-  if (editedBy.role === 'admin') {
-    // Найдем менеджера сотрудника для уведомления
-    const managerMessage = `
-📝 <b>Лог сотрудника отредактирован администратором</b>
+  if (editedBy.role === "admin") {
+    // Сообщение для менеджера
+    const _managerMessage = `
+📝 <b>Лог отредактирован</b>
 
-👤 <b>Сотрудник:</b> ${user.firstName} ${user.lastName || ''}
-📅 <b>Дата:</b> ${dateStr}
-👑 <b>Редактировал:</b> ${editedBy.firstName} ${editedBy.lastName || ''} (Администратор)
+👤 Сотрудник: ${user.firstName} ${user.lastName}
+📅 Дата: ${dateStr}
+👨‍💼 Редактировал: ${editedBy.firstName} ${editedBy.lastName}
 
-<b>Изменения:</b>
-${changesList}
+🔗 <a href="${WEB_APP_URL}/admin/worklogs">Просмотреть в админке</a>
+  `.trim();
 
-ℹ️ Администратор внёс корректировки в рабочий лог.
-    `.trim();
-
-    // Здесь можно добавить логику поиска менеджера команды
-    info(`📝 Лог отредактирован администратором: ${user.firstName} - ${dateStr}`);
+    // Отправляем уведомление менеджеру
+    if (managerTelegramId) {
+      await _sendTelegramMessage(managerTelegramId, _managerMessage, managerOptions);
+    }
   }
 
-  info(`✏️ Уведомление о редактировании отправлено: ${user.firstName} - ${dateStr}`);
+  _info(
+    `✏️ Уведомление о редактировании отправлено: ${user.firstName} - ${dateStr}`,
+  );
 }
 
-module.exports = { notifyLogEdited }; 
+module.exports = { notifyLogEdited };

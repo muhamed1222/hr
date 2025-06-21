@@ -9,9 +9,16 @@ export const useTelegramUI = () => {
     tg.ready();
     tg.expand(); // Полный экран
     
-    // Настройка цветовой схемы
-    tg.setHeaderColor('#1f2937'); // темный заголовок
-    tg.setBackgroundColor('#f9fafb'); // светлый фон
+    // Настройка цветовой схемы (только для версий 6.1+)
+    const version = parseFloat(tg.version || '6.0');
+    if (version >= 6.1) {
+      try {
+        tg.setHeaderColor('#1f2937'); // темный заголовок
+        tg.setBackgroundColor('#f9fafb'); // светлый фон
+      } catch (error) {
+        console.warn('Цветовые настройки не поддерживаются в этой версии Telegram');
+      }
+    }
     
     // Скрываем кнопки по умолчанию
     tg.MainButton.hide();

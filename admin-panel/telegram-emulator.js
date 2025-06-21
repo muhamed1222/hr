@@ -279,7 +279,7 @@ window.Telegram = {
       const message = params.message || '';
       const buttons = params.buttons || [{ text: 'OK', type: 'default' }];
       
-      let buttonTexts = buttons.map(b => b.text).join(' / ');
+      const buttonTexts = buttons.map(b => b.text).join(' / ');
       const result = prompt(`📱 Telegram Popup\n\n${message}\n\nButtons: ${buttonTexts}`);
       
       if (callback) {

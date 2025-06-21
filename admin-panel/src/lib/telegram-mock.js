@@ -536,12 +536,20 @@ export async function initTelegramMock() {
 
       // Настройка цветов
       setHeaderColor(color) {
+        if (!this.isVersionAtLeast('6.1')) {
+          console.warn('[Telegram.WebApp] Header color is not supported in version', this.version);
+          return this;
+        }
         console.log('🎨 Header color:', color);
         document.documentElement.style.setProperty('--tg-theme-header-bg-color', color);
         return this;
       },
 
       setBackgroundColor(color) {
+        if (!this.isVersionAtLeast('6.1')) {
+          console.warn('[Telegram.WebApp] Background color is not supported in version', this.version);
+          return this;
+        }
         console.log('🎨 Background color:', color);
         document.documentElement.style.setProperty('--tg-theme-bg-color', color);
         return this;

@@ -1,7 +1,14 @@
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-const { User } = require('../models');
-const { ValidationError, AuthenticationError, NotFoundError } = require('./errors');
+"use strict";
+
+const _bcrypt = require("bcryptjs");
+const _jwt = require("jsonwebtoken");
+const { User, Team } = require("../models");
+const {
+  ValidationError,
+  AuthenticationError,
+  NotFoundError,
+} = require("./errors");
+const { metrics } = require("../utils/metrics");
 
 /**
  * Сервис аутентификации
@@ -15,38 +22,56 @@ class AuthService {
    * @returns {Promise<{user: Object, token: string}>}
    */
   async authenticate(username, password) {
+    // Валидация входных данных
     if (!username || !password) {
-      throw new ValidationError('Имя пользователя и пароль обязательны');
+      throw new ValidationError("Имя пользователя и пароль обязательны");
     }
 
-    // Поиск активного админа
+    // Поиск пользователя
     const user = await User.findOne({
-      where: { 
-        username: username.trim(),
-        status: 'active',
-        role: 'admin'
-      }
+      where: { username },
     });
 
     if (!user) {
-      throw new AuthenticationError('Неверные учетные данные');
+      metrics.recordAuthEvent("login", false);
+      throw new AuthenticationError("Неверные учетные данные");
     }
 
     // Проверка пароля
     const isValidPassword = await this._validatePassword(user, password);
     if (!isValidPassword) {
-      throw new AuthenticationError('Неверные учетные данные');
+      metrics.recordAuthEvent("login", false);
+      throw new AuthenticationError("Неверные учетные данные");
+    }
+
+    // Проверка статуса пользователя
+    if (user.status !== "active") {
+      metrics.recordAuthEvent("login", false);
+      throw new AuthenticationError("Неверные учетные данные");
+    }
+
+    // Проверка роли (только админы могут входить через API)
+    if (user.role !== "admin") {
+      metrics.recordAuthEvent("login", false);
+      throw new AuthenticationError("Неверные учетные данные");
     }
 
     // Обновление времени последнего входа
-    await this._updateLastLogin(user);
+    await user.update({ lastLogin: new Date() });
 
     // Генерация токена
-    const token = this._generateToken(user);
+    const token = jwt.sign(
+      { userId: user.id, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: "24h" },
+    );
+
+    // Запись успешной аутентификации
+    metrics.recordAuthEvent("login", true);
 
     return {
+      token,
       user: this._sanitizeUser(user),
-      token
     };
   }
 
@@ -58,23 +83,22 @@ class AuthService {
   async verifyToken(token) {
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      
+
       const user = await User.findByPk(decoded.userId, {
-        attributes: ['id', 'name', 'username', 'role', 'status'],
-        include: ['teams', 'managedTeams']
+        attributes: ["id", "name", "username", "role", "status"],
       });
 
-      if (!user || user.status !== 'active') {
-        throw new AuthenticationError('Пользователь неактивен или не найден');
+      if (!user || user.status !== "active") {
+        throw new AuthenticationError("Неверные учетные данные");
       }
 
       return user;
     } catch (error) {
-      if (error.name === 'JsonWebTokenError') {
-        throw new AuthenticationError('Недействительный токен');
+      if (error.name === "JsonWebTokenError") {
+        throw new AuthenticationError("Недействительный токен");
       }
-      if (error.name === 'TokenExpiredError') {
-        throw new AuthenticationError('Токен истёк');
+      if (error.name === "TokenExpiredError") {
+        throw new AuthenticationError("Токен истёк");
       }
       throw error;
     }
@@ -88,22 +112,37 @@ class AuthService {
    * @returns {Promise<void>}
    */
   async changePassword(userId, currentPassword, newPassword) {
+    // Поиск пользователя
     const user = await User.findByPk(userId);
     if (!user) {
-      throw new NotFoundError('Пользователь не найден');
+      throw new NotFoundError("Пользователь не найден");
     }
 
     // Проверка текущего пароля
-    if (user.passwordHash && !(await bcrypt.compare(currentPassword, user.passwordHash))) {
-      throw new AuthenticationError('Неверный текущий пароль');
+    if (
+      user.passwordHash &&
+      !(await bcrypt.compare(currentPassword, user.passwordHash))
+    ) {
+      throw new AuthenticationError("Неверный текущий пароль");
     }
 
     // Валидация нового пароля
-    this._validateNewPassword(newPassword);
+    if (!this._validatePasswordStrength(newPassword)) {
+      throw new ValidationError(
+        "Новый пароль должен содержать минимум 8 символов, включая заглавную букву, цифру и спецсимвол",
+      );
+    }
 
-    // Хеширование и сохранение
-    const passwordHash = await bcrypt.hash(newPassword, 12);
-    await user.update({ passwordHash });
+    // Хеширование нового пароля
+    const newPasswordHash = await bcrypt.hash(newPassword, 12);
+
+    // Обновление пароля
+    await user.update({ passwordHash: newPasswordHash });
+
+    // Запись успешной смены пароля
+    metrics.recordAuthEvent("passwordChange", true);
+
+    return this._sanitizeUser(user);
   }
 
   /**
@@ -117,7 +156,7 @@ class AuthService {
     // Проверка существования пользователя
     const existingUser = await User.findOne({ where: { username } });
     if (existingUser) {
-      throw new ValidationError('Пользователь с таким именем уже существует');
+      throw new ValidationError("Пользователь с таким именем уже существует");
     }
 
     // Валидация пароля
@@ -129,8 +168,8 @@ class AuthService {
       username,
       passwordHash,
       name: name || username,
-      role: 'admin',
-      status: 'active'
+      role: "admin",
+      status: "active",
     });
 
     return this._sanitizeUser(user);
@@ -146,8 +185,10 @@ class AuthService {
     }
 
     // Совместимость с env переменными (только для перехода)
-    if (user.username === process.env.ADMIN_USERNAME && 
-        password === process.env.ADMIN_PASSWORD) {
+    if (
+      user.username === process.env.ADMIN_USERNAME &&
+      password === process.env.ADMIN_PASSWORD
+    ) {
       // Создаем хеш для будущих входов
       const passwordHash = await bcrypt.hash(password, 12);
       await user.update({ passwordHash });
@@ -158,28 +199,41 @@ class AuthService {
   }
 
   /**
-   * Обновление времени последнего входа
+   * Валидация нового пароля
    * @private
    */
-  async _updateLastLogin(user) {
-    await user.update({ lastLogin: new Date() });
+  _validateNewPassword(password) {
+    if (!password || password.length < 8) {
+      throw new ValidationError("Пароль должен содержать минимум 8 символов");
+    }
+
+    const hasUpperCase = /[A-Z]/.test(password);
+    const hasLowerCase = /[a-z]/.test(password);
+    const hasNumbers = /\d/.test(password);
+    const hasSpecialChar = /[@$!%*?&]/.test(password);
+
+    if (!hasUpperCase || !hasLowerCase || !hasNumbers || !hasSpecialChar) {
+      throw new ValidationError(
+        "Пароль должен содержать заглавную букву, строчную букву, цифру и спецсимвол",
+      );
+    }
   }
 
   /**
-   * Генерация JWT токена
+   * Валидация силы пароля
    * @private
    */
-  _generateToken(user) {
-    return jwt.sign(
-      { 
-        userId: user.id,
-        id: user.id, // для совместимости
-        role: user.role, 
-        username: user.username 
-      },
-      process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
-    );
+  _validatePasswordStrength(password) {
+    if (!password || password.length < 8) {
+      return false;
+    }
+
+    const hasUpperCase = /[A-Z]/.test(password);
+    const hasLowerCase = /[a-z]/.test(password);
+    const hasNumbers = /\d/.test(password);
+    const hasSpecialChar = /[@$!%*?&]/.test(password);
+
+    return hasUpperCase && hasLowerCase && hasNumbers && hasSpecialChar;
   }
 
   /**
@@ -192,27 +246,6 @@ class AuthService {
     delete userData.telegramId;
     return userData;
   }
-
-  /**
-   * Валидация нового пароля
-   * @private
-   */
-  _validateNewPassword(password) {
-    if (!password || password.length < 8) {
-      throw new ValidationError('Пароль должен содержать минимум 8 символов');
-    }
-
-    const hasUpperCase = /[A-Z]/.test(password);
-    const hasLowerCase = /[a-z]/.test(password);
-    const hasNumbers = /\d/.test(password);
-    const hasSpecialChar = /[@$!%*?&]/.test(password);
-
-    if (!hasUpperCase || !hasLowerCase || !hasNumbers || !hasSpecialChar) {
-      throw new ValidationError(
-        'Пароль должен содержать заглавную букву, строчную букву, цифру и спецсимвол'
-      );
-    }
-  }
 }
 
-module.exports = new AuthService(); 
+module.exports = new AuthService();

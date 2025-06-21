@@ -1,14 +1,28 @@
-const TelegramBot = require('node-telegram-bot-api');
-const { User, WorkLog, Absence } = require('../models');
-const moment = require('moment');
-const { emitEvent } = require('../events/eventEmitter');
-require('dotenv').config();
+"use strict";
 
-moment.locale('ru');
+const { info, error, warn, debug } = require("../utils/logger");
+
+const _TelegramBot = require("node-telegram-bot-api");
+const { User, WorkLog, Absence } = require("../models");
+const _moment = require("moment");
+const { emitEvent } = require("../events/eventEmitter");
+require("dotenv").config();
+
+moment.locale("ru");
+
+// Константы для лимитов
+const COOLDOWN_LIMITS = {
+  DEFAULT: HTTP_STATUS_CODES.OK0,
+  MYDAY: HTTP_STATUS_CODES.OK0,
+  EDITREPORT: HTTP_STATUS_CODES.OK0,
+  HISTORY: HTTP_STATUS_CODES.OK0,
+};
 
 class TimeBot {
   constructor() {
-    this.bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: true });
+    this.bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, {
+      polling: true,
+    });
     this.userStates = new Map(); // Хранение состояний пользователей
     this.actionCooldowns = new Map(); // Защита от повторных нажатий
     this.setupCommands();
@@ -31,13 +45,13 @@ class TimeBot {
   }
 
   setupCallbacks() {
-    this.bot.on('callback_query', this.handleCallback.bind(this));
+    this.bot.on("callback_query", this.handleCallback.bind(this));
   }
 
   setupTextMessages() {
     // Обработка текстовых сообщений (кроме команд)
-    this.bot.on('message', (msg) => {
-      if (!msg.text || msg.text.startsWith('/')) return;
+    this.bot.on("message", (msg) => {
+      if (!msg.text || msg.text.startsWith("/")) return;
       this.handleTextMessage(msg);
     });
   }
@@ -45,39 +59,44 @@ class TimeBot {
   async handleStart(msg) {
     const chatId = msg.chat.id;
     const telegramId = msg.from.id;
-    const name = `${msg.from.first_name} ${msg.from.last_name || ''}`.trim();
+    const name = `${msg.from.first_name} ${msg.from.last_name || ""}`.trim();
     const username = msg.from.username;
 
     try {
       // Проверяем, существует ли пользователь
-      let user = await User.findOne({ where: { telegramId } });
-      
+      const _user = await User.findOne({ where: { telegramId } });
+
       if (!user) {
         // Создаём нового пользователя
         user = await User.create({
           telegramId,
           name,
           username,
-          role: 'employee',
-          status: 'active'
+          role: "employee",
+          status: "active",
         });
-        
-        await this.bot.sendMessage(chatId, 
+
+        await this.bot.sendMessage(
+          chatId,
           `👋 Добро пожаловать в Outcast TimeBot, ${name}!\n\n` +
-          `Вы успешно зарегистрированы как сотрудник.\n` +
-          `Используйте кнопки ниже для отметки времени.`
+            `Вы успешно зарегистрированы как сотрудник.\n` +
+            `Используйте кнопки ниже для отметки времени.`,
         );
       } else {
-        await this.bot.sendMessage(chatId, 
+        await this.bot.sendMessage(
+          chatId,
           `🎯 С возвращением, ${name}!\n\n` +
-          `Ваш статус: ${this.getRoleText(user.role)}`
+            `Ваш статус: ${this.getRoleText(user.role)}`,
         );
       }
 
       await this.sendMainMenu(chatId);
     } catch (error) {
-      console.error('Ошибка в handleStart:', error);
-      await this.bot.sendMessage(chatId, '❌ Произошла ошибка при регистрации. Попробуйте позже.');
+      error("Ошибка в handleStart:", error);
+      await this.bot.sendMessage(
+        chatId,
+        "❌ Произошла ошибка при регистрации. Попробуйте позже.",
+      );
     }
   }
 
@@ -86,7 +105,7 @@ class TimeBot {
     const telegramId = msg.from.id;
 
     // Защита от повторных нажатий
-    if (this.isActionOnCooldown(telegramId, 'myday', 1000)) {
+    if (this.isActionOnCooldown(telegramId, "myday", COOLDOWN_LIMITS.MYDAY)) {
       return;
     }
 
@@ -94,35 +113,37 @@ class TimeBot {
       const user = await this.getUser(telegramId);
       if (!user) return await this.sendNotRegistered(chatId);
 
-      const today = moment().format('YYYY-MM-DD');
+      const today = moment().format("YYYY-MM-DD");
       const workLog = await WorkLog.findOne({
-        where: { userId: user.id, workDate: today }
+        where: { userId: user.id, workDate: today },
       });
 
-      let message = `📊 Ваш день (${moment().format('DD.MM.YYYY')}):\n\n`;
+      const _message = `📊 Ваш день (${moment().format("DD.MM.YYYY")}):\n\n`;
 
       if (workLog) {
-        message += `🟢 Пришёл: ${workLog.arrivedAt || 'Не отмечено'}\n`;
-        message += `🍱 Обед: ${workLog.lunchStart ? `${workLog.lunchStart} - ${workLog.lunchEnd || 'В процессе'}` : 'Не было'}\n`;
-        message += `🔴 Ушёл: ${workLog.leftAt || 'Не отмечено'}\n`;
+        message += `🟢 Пришёл: ${workLog.arrivedAt || "Не отмечено"}\n`;
+        message += `🍱 Обед: ${workLog.lunchStart ? `${workLog.lunchStart} - ${workLog.lunchEnd || "В процессе"}` : "Не было"}\n`;
+        message += `🔴 Ушёл: ${workLog.leftAt || "Не отмечено"}\n`;
         message += `💼 Режим: ${this.getWorkModeText(workLog.workMode)}\n`;
         message += `⏱ Всего: ${this.formatMinutes(workLog.totalMinutes)}\n\n`;
-        
+
         if (workLog.dailyReport) {
           message += `📝 Отчёт: ${workLog.dailyReport}\n`;
         }
-        
+
         if (workLog.problems) {
           message += `⚠️ Проблемы: ${workLog.problems}`;
         }
       } else {
-        message += '❌ Сегодня активности не было';
+        message += "❌ Сегодня активности не было";
       }
 
       await this.bot.sendMessage(chatId, message);
     } catch (error) {
-      console.error('Ошибка в handleMyDay:', error);
-      await this.sendUserFriendlyError(chatId, 'command_error', { command: 'myday' });
+      error("Ошибка в handleMyDay:", error);
+      await this.sendUserFriendlyError(chatId, "command_error", {
+        command: "myday",
+      });
     }
   }
 
@@ -131,7 +152,13 @@ class TimeBot {
     const telegramId = msg.from.id;
 
     // Защита от повторных нажатий
-    if (this.isActionOnCooldown(telegramId, 'editreport', 1000)) {
+    if (
+      this.isActionOnCooldown(
+        telegramId,
+        "editreport",
+        COOLDOWN_LIMITS.EDITREPORT,
+      )
+    ) {
       return;
     }
 
@@ -139,37 +166,42 @@ class TimeBot {
       const user = await this.getUser(telegramId);
       if (!user) return await this.sendNotRegistered(chatId);
 
-      const today = moment().format('YYYY-MM-DD');
+      const today = moment().format("YYYY-MM-DD");
       const workLog = await WorkLog.findOne({
-        where: { userId: user.id, workDate: today }
+        where: { userId: user.id, workDate: today },
       });
 
       if (!workLog) {
-        return await this.bot.sendMessage(chatId, 
-          '❌ Сегодня нет записей рабочего времени'
+        return await this.bot.sendMessage(
+          chatId,
+          "❌ Сегодня нет записей рабочего времени",
         );
       }
 
       if (!workLog.leftAt) {
-        return await this.bot.sendMessage(chatId, 
-          '⚠️ Сначала завершите рабочий день кнопкой "Ушёл домой"'
+        return await this.bot.sendMessage(
+          chatId,
+          '⚠️ Сначала завершите рабочий день кнопкой "Ушёл домой"',
         );
       }
 
       // Устанавливаем состояние редактирования отчёта
-      this.userStates.set(telegramId, { 
-        state: 'editing_report', 
-        workLogId: workLog.id 
+      this.userStates.set(telegramId, {
+        state: "editing_report",
+        workLogId: workLog.id,
       });
 
-      const currentReport = workLog.dailyReport || 'Отчёт отсутствует';
-      await this.bot.sendMessage(chatId, 
+      const currentReport = workLog.dailyReport || "Отчёт отсутствует";
+      await this.bot.sendMessage(
+        chatId,
         `📝 Текущий отчёт:\n"${currentReport}"\n\n` +
-        `Напишите новый отчёт или отправьте /cancel для отмены:`
+          `Напишите новый отчёт или отправьте /cancel для отмены:`,
       );
     } catch (error) {
-      console.error('Ошибка в handleEditReport:', error);
-      await this.sendUserFriendlyError(chatId, 'command_error', { command: 'editreport' });
+      error("Ошибка в handleEditReport:", error);
+      await this.sendUserFriendlyError(chatId, "command_error", {
+        command: "editreport",
+      });
     }
   }
 
@@ -178,7 +210,7 @@ class TimeBot {
     const telegramId = msg.from.id;
 
     this.userStates.delete(telegramId);
-    await this.bot.sendMessage(chatId, '✅ Операция отменена');
+    await this.bot.sendMessage(chatId, "✅ Операция отменена");
     await this.sendMainMenu(chatId);
   }
 
@@ -187,63 +219,66 @@ class TimeBot {
     const telegramId = msg.from.id;
 
     // Защита от повторных нажатий
-    if (this.isActionOnCooldown(telegramId, 'history', 2000)) {
+    if (
+      this.isActionOnCooldown(telegramId, "history", COOLDOWN_LIMITS.HISTORY)
+    ) {
       return;
     }
 
     try {
-      await this.bot.sendChatAction(chatId, 'typing');
-      
+      await this.bot.sendChatAction(chatId, "typing");
+
       const user = await this.getUser(telegramId);
       if (!user) return await this.sendNotRegistered(chatId);
 
       // Получаем данные за последние 30 дней
       const endDate = moment();
-      const startDate = moment().subtract(29, 'days');
+      const startDate = moment().subtract(29, "days");
 
-      const { Op } = require('sequelize');
+      const { Op } = require("sequelize");
       const workLogs = await WorkLog.findAll({
         where: {
           userId: user.id,
           workDate: {
             [Op.between]: [
-              startDate.format('YYYY-MM-DD'),
-              endDate.format('YYYY-MM-DD')
-            ]
-          }
+              startDate.format("YYYY-MM-DD"),
+              endDate.format("YYYY-MM-DD"),
+            ],
+          },
         },
-        order: [['workDate', 'DESC']],
-        limit: 20 // Ограничиваем количество записей для удобства чтения
+        order: [["workDate", "DESC"]],
+        limit: LIMITS.DEFAULT_PAGE_SIZE, // Ограничиваем количество записей для удобства чтения
       });
 
-      let message = `📚 *История работы (последние 30 дней)*\n\n`;
+      const _message = `📚 *История работы (последние 30 дней)*\n\n`;
 
       if (workLogs.length === 0) {
-        message += '❌ За последние 30 дней записей не найдено';
+        message += "❌ За последние 30 дней записей не найдено";
       } else {
         // Общая статистика
-        let totalMinutes = 0;
-        let workDays = 0;
-        let reportsCount = 0;
-        let lateArrivals = 0;
+        const _totalMinutes = 0;
+        const _workDays = 0;
+        const _reportsCount = 0;
+        const _lateArrivals = 0;
 
-        workLogs.forEach(log => {
+        workLogs.forEach((log) => {
           totalMinutes += log.totalMinutes || 0;
-          if (log.workMode !== 'sick' && log.workMode !== 'vacation') {
+          if (log.workMode !== "sick" && log.workMode !== "vacation") {
             workDays++;
           }
           if (log.dailyReport) reportsCount++;
-          
+
           if (log.arrivedAt) {
-            const arrivalMoment = moment(log.arrivedAt, 'HH:mm:ss');
-            const expectedTime = moment('09:00:00', 'HH:mm:ss');
+            const arrivalMoment = moment(log.arrivedAt, "HH:mm:ss");
+            const expectedTime = moment("09:00:00", "HH:mm:ss");
             if (arrivalMoment.isAfter(expectedTime)) lateArrivals++;
           }
         });
 
-        const avgHours = workDays > 0 ? (totalMinutes / workDays / 60).toFixed(1) : 0;
+        const avgHours =
+          workDays > 0 ? (totalMinutes / workDays / 60).toFixed(1) : 0;
 
-        message += '📊 *Общая статистика:*\n';
+        message += "📊 *Общая статистика:*\n";
         message += `📅 Записей найдено: ${workLogs.length}\n`;
         message += `⏱ Всего отработано: ${this.formatMinutes(totalMinutes)}\n`;
         message += `💼 Рабочих дней: ${workDays}\n`;
@@ -252,21 +287,23 @@ class TimeBot {
         if (lateArrivals > 0) {
           message += `⚠️ Опозданий: ${lateArrivals}\n`;
         }
-        message += '\n';
+        message += "\n";
 
         // Последние записи
-        message += '📋 *Последние записи:*\n';
-        workLogs.slice(0, 10).forEach(log => {
-          const date = moment(log.workDate).format('DD.MM.YYYY ddd');
+        message += "📋 *Последние записи:*\n";
+        workLogs.slice(0, 10).forEach((log) => {
+          const date = moment(log.workDate).format("DD.MM.YYYY ddd");
           const mode = this.getWorkModeText(log.workMode);
           const time = this.formatMinutes(log.totalMinutes || 0);
-          const reportIcon = log.dailyReport ? '📝' : '❌';
-          const arrivalTime = log.arrivedAt ? log.arrivedAt.substring(0, 5) : '—';
-          const leftTime = log.leftAt ? log.leftAt.substring(0, 5) : '—';
-          
+          const reportIcon = log.dailyReport ? "📝" : "❌";
+          const arrivalTime = log.arrivedAt
+            ? log.arrivedAt.substring(0, 5)
+            : "—";
+          const leftTime = log.leftAt ? log.leftAt.substring(0, 5) : "—";
+
           message += `${date}:\n`;
           message += `   💼 ${mode} (${arrivalTime}→${leftTime}, ${time})\n`;
-          message += `   ${reportIcon} ${log.dailyReport ? 'Отчёт сдан' : 'Нет отчёта'}\n\n`;
+          message += `   ${reportIcon} ${log.dailyReport ? "Отчёт сдан" : "Нет отчёта"}\n\n`;
         });
 
         if (workLogs.length > 10) {
@@ -274,13 +311,15 @@ class TimeBot {
         }
       }
 
-      await this.bot.sendMessage(chatId, message, { 
-        parse_mode: 'Markdown',
-        disable_web_page_preview: true 
+      await this.bot.sendMessage(chatId, message, {
+        parse_mode: "Markdown",
+        disable_web_page_preview: true,
       });
     } catch (error) {
-      console.error('Ошибка в handleHistory:', error);
-      await this.sendUserFriendlyError(chatId, 'stats_error', { statsType: 'history' });
+      error("Ошибка в handleHistory:", error);
+      await this.sendUserFriendlyError(chatId, "stats_error", {
+        statsType: "history",
+      });
     }
   }
 
@@ -288,9 +327,9 @@ class TimeBot {
     const chatId = msg.chat.id;
     const telegramId = msg.from.id;
     const user = await this.getUser(telegramId);
-    const webAppUrl = process.env.WEB_APP_URL || 'https://your-domain.com';
-    
-    let helpMessage = 
+    const webAppUrl = process.env.WEB_APP_URL || "https://your-domain.com";
+
+    let helpMessage =
       `🤖 *TimeBot - Справочник команд*\n\n` +
       `*📱 Основные команды:*\n` +
       `🚀 /start - Начать работу/регистрация\n` +
@@ -301,12 +340,13 @@ class TimeBot {
       `❌ /cancel - Отменить текущую операцию\n` +
       `❓ /help - Эта справка\n\n`;
 
-    if (user && (user.role === 'manager' || user.role === 'admin')) {
-      helpMessage += `*👥 Команды менеджера:*\n` +
+    if (user && (user.role === "manager" || user.role === "admin")) {
+      helpMessage +=
+        `*👥 Команды менеджера:*\n` +
         `🏢 /team - Статус команды в реальном времени\n\n`;
     }
 
-    helpMessage += 
+    helpMessage +=
       `*🎯 Кнопки главного меню:*\n` +
       `✅ Пришёл в офис - Отметка прихода на работу\n` +
       `🏠 Работаю удалённо - Отметка удалённой работы\n` +
@@ -331,9 +371,9 @@ class TimeBot {
       `• Больничный/отпуск можно изменить в любое время\n` +
       `• Веб-панель синхронизирована с ботом`;
 
-    await this.bot.sendMessage(chatId, helpMessage, { 
-      parse_mode: 'Markdown',
-      disable_web_page_preview: true 
+    await this.bot.sendMessage(chatId, helpMessage, {
+      parse_mode: "Markdown",
+      disable_web_page_preview: true,
     });
   }
 
@@ -342,13 +382,15 @@ class TimeBot {
     const telegramId = msg.from.id;
 
     // Защита от повторных нажатий
-    if (this.isActionOnCooldown(telegramId, 'myweek', 2000)) {
+    if (
+      this.isActionOnCooldown(telegramId, "myweek", COOLDOWN_LIMITS.DEFAULT)
+    ) {
       return;
     }
 
     try {
-      await this.bot.sendChatAction(chatId, 'typing');
-      
+      await this.bot.sendChatAction(chatId, "typing");
+
       const user = await this.getUser(telegramId);
       if (!user) return await this.sendNotRegistered(chatId);
 
@@ -357,92 +399,105 @@ class TimeBot {
       const startDate = workingDays[0];
       const endDate = workingDays[workingDays.length - 1];
 
-      const { Op } = require('sequelize');
+      const { Op } = require("sequelize");
       const workLogs = await WorkLog.findAll({
         where: {
           userId: user.id,
           workDate: {
             [Op.between]: [
-              startDate.format('YYYY-MM-DD'),
-              endDate.format('YYYY-MM-DD')
-            ]
-          }
+              startDate.format("YYYY-MM-DD"),
+              endDate.format("YYYY-MM-DD"),
+            ],
+          },
         },
-        order: [['workDate', 'ASC']]
+        order: [["workDate", "ASC"]],
       });
 
-      let message = `📅 *Последние 5 рабочих дней (${startDate.format('DD.MM')} - ${endDate.format('DD.MM.YYYY')})*\n\n`;
+      const _message = `📅 *Последние 5 рабочих дней (${startDate.format("DD.MM")} - ${endDate.format("DD.MM.YYYY")})*\n\n`;
 
       // Статистика
-      let totalMinutes = 0;
-      let actualWorkDays = 0;
-      let remoteDays = 0;
-      let officeDays = 0;
-      let sickDays = 0;
-      let vacationDays = 0;
-      let reportsCount = 0;
-      let lateArrivals = 0;
+      const _totalMinutes = 0;
+      const _actualWorkDays = 0;
+      const _remoteDays = 0;
+      const _officeDays = 0;
+      const _sickDays = 0;
+      const _vacationDays = 0;
+      const _reportsCount = 0;
+      const _lateArrivals = 0;
 
       // Создаём карту рабочих дней
       const dayMap = new Map();
-      workingDays.forEach(date => {
-        dayMap.set(date.format('YYYY-MM-DD'), {
-          date: date.format('YYYY-MM-DD'),
-          dayName: date.format('ddd DD.MM'),
-          workLog: null
+      workingDays.forEach((date) => {
+        dayMap.set(date.format("YYYY-MM-DD"), {
+          date: date.format("YYYY-MM-DD"),
+          dayName: date.format("ddd DD.MM"),
+          workLog: null,
         });
       });
 
       // Заполняем данными
-      workLogs.forEach(log => {
+      workLogs.forEach((log) => {
         if (dayMap.has(log.workDate)) {
           dayMap.get(log.workDate).workLog = log;
         }
       });
 
       // Формируем отчёт по дням
-      message += '📊 *Детализация по рабочим дням:*\n';
-      dayMap.forEach(day => {
+      message += "📊 *Детализация по рабочим дням:*\n";
+      dayMap.forEach((day) => {
         const log = day.workLog;
         if (log) {
           const mode = this.getWorkModeText(log.workMode);
           const time = this.formatMinutes(log.totalMinutes || 0);
-          const reportIcon = log.dailyReport && log.dailyReport !== 'Больничный день' && log.dailyReport !== 'Отпуск' ? '📝' : '❌';
-          const arrivalTime = log.arrivedAt ? log.arrivedAt.substring(0, 5) : '—';
-          const leftTime = log.leftAt ? log.leftAt.substring(0, 5) : '—';
-          
+          const reportIcon =
+            log.dailyReport &&
+            log.dailyReport !== "Больничный день" &&
+            log.dailyReport !== "Отпуск"
+              ? "📝"
+              : "❌";
+          const arrivalTime = log.arrivedAt
+            ? log.arrivedAt.substring(0, 5)
+            : "—";
+          const leftTime = log.leftAt ? log.leftAt.substring(0, 5) : "—";
+
           // Иконки для разных режимов
-          const modeIcon = {
-            'office': '🏢',
-            'remote': '🏠',
-            'sick': '🤒',
-            'vacation': '🌴'
-          }[log.workMode] || '💼';
-          
+          const modeIcon =
+            {
+              office: "🏢",
+              remote: "🏠",
+              sick: "🤒",
+              vacation: "🌴",
+            }[log.workMode] || "💼";
+
           message += `${day.dayName}: ${modeIcon} ${mode}\n`;
-          if (log.workMode === 'office' || log.workMode === 'remote') {
+          if (log.workMode === "office" || log.workMode === "remote") {
             message += `   ⏰ ${arrivalTime} → ${leftTime} (${time})\n`;
-            message += `   ${reportIcon} ${log.dailyReport && log.dailyReport !== 'Больничный день' ? 'Есть отчёт' : 'Нет отчёта'}\n`;
+            message += `   ${reportIcon} ${log.dailyReport && log.dailyReport !== "Больничный день" ? "Есть отчёт" : "Нет отчёта"}\n`;
           }
-          message += '\n';
+          message += "\n";
 
           // Статистика
           totalMinutes += log.totalMinutes || 0;
-          if (log.workMode === 'office' || log.workMode === 'remote') {
+          if (log.workMode === "office" || log.workMode === "remote") {
             actualWorkDays++;
-            if (log.workMode === 'remote') remoteDays++;
-            if (log.workMode === 'office') officeDays++;
-            if (log.dailyReport && log.dailyReport !== 'Больничный день' && log.dailyReport !== 'Отпуск') reportsCount++;
-            
+            if (log.workMode === "remote") remoteDays++;
+            if (log.workMode === "office") officeDays++;
+            if (
+              log.dailyReport &&
+              log.dailyReport !== "Больничный день" &&
+              log.dailyReport !== "Отпуск"
+            )
+              reportsCount++;
+
             // Проверка опозданий (после 9:00)
             if (log.arrivedAt) {
-              const arrivalMoment = moment(log.arrivedAt, 'HH:mm:ss');
-              const expectedTime = moment('09:00:00', 'HH:mm:ss');
+              const arrivalMoment = moment(log.arrivedAt, "HH:mm:ss");
+              const expectedTime = moment("09:00:00", "HH:mm:ss");
               if (arrivalMoment.isAfter(expectedTime)) lateArrivals++;
             }
-          } else if (log.workMode === 'sick') {
+          } else if (log.workMode === "sick") {
             sickDays++;
-          } else if (log.workMode === 'vacation') {
+          } else if (log.workMode === "vacation") {
             vacationDays++;
           }
         } else {
@@ -451,9 +506,12 @@ class TimeBot {
       });
 
       // Итоговая статистика
-      const avgHours = actualWorkDays > 0 ? (totalMinutes / actualWorkDays / 60).toFixed(1) : 0;
-      
-      message += '📈 *Сводка за рабочие дни:*\n';
+      const avgHours =
+        actualWorkDays > 0
+          ? (totalMinutes / actualWorkDays / 60).toFixed(1)
+          : 0;
+
+      message += "📈 *Сводка за рабочие дни:*\n";
       message += `⏱ Всего отработано: ${this.formatMinutes(totalMinutes)}\n`;
       message += `📅 Рабочих дней: ${actualWorkDays}/5\n`;
       if (officeDays > 0) message += `🏢 В офисе: ${officeDays} дней\n`;
@@ -469,16 +527,18 @@ class TimeBot {
       }
 
       // Добавляем Deep Link для перехода в админку
-      const webAppUrl = process.env.WEB_APP_URL || 'https://your-domain.com';
+      const webAppUrl = process.env.WEB_APP_URL || "https://your-domain.com";
       message += `\n🔗 [Подробная аналитика в админке](${webAppUrl}/analytics)`;
 
-      await this.bot.sendMessage(chatId, message, { 
-        parse_mode: 'Markdown',
-        disable_web_page_preview: true 
+      await this.bot.sendMessage(chatId, message, {
+        parse_mode: "Markdown",
+        disable_web_page_preview: true,
       });
     } catch (error) {
-      console.error('Ошибка в handleMyWeek:', error);
-      await this.sendUserFriendlyError(chatId, 'stats_error', { statsType: 'weekly' });
+      error("Ошибка в handleMyWeek:", error);
+      await this.sendUserFriendlyError(chatId, "stats_error", {
+        statsType: "weekly",
+      });
     }
   }
 
@@ -488,155 +548,177 @@ class TimeBot {
 
     try {
       // Защита от повторных запросов
-      if (this.isActionOnCooldown(telegramId, 'team_command', 3000)) {
-        return await this.sendUserFriendlyError(chatId, 'action_cooldown');
+      if (
+        this.isActionOnCooldown(
+          telegramId,
+          "team_command",
+          COOLDOWN_LIMITS.DEFAULT,
+        )
+      ) {
+        return await this.sendUserFriendlyError(chatId, "action_cooldown");
       }
 
       const user = await this.getUser(telegramId);
-      if (!user) return await this.sendUserFriendlyError(chatId, 'user_not_registered');
+      if (!user)
+        return await this.sendUserFriendlyError(chatId, "user_not_registered");
 
       // Проверяем роль пользователя
-      if (user.role !== 'manager' && user.role !== 'admin') {
-        return await this.sendUserFriendlyError(chatId, 'permission_denied');
+      if (user.role !== "manager" && user.role !== "admin") {
+        return await this.sendUserFriendlyError(chatId, "permission_denied");
       }
 
       // Показываем индикатор загрузки
-      await this.bot.sendChatAction(chatId, 'typing');
+      await this.bot.sendChatAction(chatId, "typing");
 
       // Получаем данные команды через API
       const teamData = await this.getTeamData();
-      
+
       if (!teamData || teamData.length === 0) {
-        return await this.bot.sendMessage(chatId, 
-          '❌ Не удалось получить данные команды или команда пуста'
+        return await this.bot.sendMessage(
+          chatId,
+          "❌ Не удалось получить данные команды или команда пуста",
         );
       }
 
-      let message = this.formatTeamData(teamData);
-      
+      const _message = this.formatTeamData(teamData);
+
       // Добавляем deep links для менеджеров
-      const webAppUrl = process.env.WEB_APP_URL || 'https://your-domain.com';
+      const webAppUrl = process.env.WEB_APP_URL || "https://your-domain.com";
       message += `\n🔗 *Управление командой:*\n`;
       message += `👥 [Список сотрудников](${webAppUrl}/users)\n`;
       message += `📊 [Аналитика команды](${webAppUrl}/analytics)\n`;
       message += `📈 [Панель управления](${webAppUrl}/dashboard)\n`;
       message += `📝 [Журнал работы](${webAppUrl}/work-logs)`;
-      
-      await this.bot.sendMessage(chatId, message, { 
-        parse_mode: 'Markdown',
-        disable_web_page_preview: true 
-      });
 
+      await this.bot.sendMessage(chatId, message, {
+        parse_mode: "Markdown",
+        disable_web_page_preview: true,
+      });
     } catch (error) {
-      console.error('Ошибка в handleTeam:', error);
-      await this.sendUserFriendlyError(chatId, 'database_error');
+      error("Ошибка в handleTeam:", error);
+      await this.sendUserFriendlyError(chatId, "database_error");
     }
   }
 
   async getTeamData() {
     try {
-      const today = moment().format('YYYY-MM-DD');
-      
+      const today = moment().format("YYYY-MM-DD");
+
       // Получаем всех активных пользователей
       const allUsers = await User.findAll({
-        where: { status: 'active' },
-        attributes: ['id', 'name', 'username', 'role']
+        where: { status: "active" },
+        attributes: ["id", "name", "username", "role"],
       });
 
       // Получаем рабочие логи за сегодня
-      const { Op } = require('sequelize');
+      const { Op } = require("sequelize");
       const workLogs = await WorkLog.findAll({
         where: {
-          workDate: today
+          workDate: today,
         },
-        include: [{
-          model: User,
-          as: 'user',
-          attributes: ['id', 'name', 'username', 'role'],
-          where: {
-            status: 'active'
-          }
-        }],
-        order: [[{ model: User, as: 'user' }, 'name', 'ASC']]
+        include: [
+          {
+            model: User,
+            as: "user",
+            attributes: ["id", "name", "username", "role"],
+            where: {
+              status: "active",
+            },
+          },
+        ],
+        order: [[{ model: User, as: "user" }, "name", "ASC"]],
       });
 
       // Создаём полную сводку
-      const teamSummary = allUsers.map(user => {
-        const workLog = workLogs.find(log => log.userId === user.id);
-        
+      const teamSummary = allUsers.map((user) => {
+        const workLog = workLogs.find((log) => log.userId === user.id);
+
         return {
           user: {
             id: user.id,
             name: user.name,
             username: user.username,
-            role: user.role
+            role: user.role,
           },
           workLog: workLog || null,
-          status: this.getEmployeeStatus(workLog)
+          status: this.getEmployeeStatus(workLog),
         };
       });
 
       return teamSummary;
     } catch (error) {
-      console.error('Ошибка получения данных команды:', error);
+      error("Ошибка получения данных команды:", error);
       return null;
     }
   }
 
   getEmployeeStatus(workLog) {
-    if (!workLog) return 'not_started';
-    
-    if (workLog.workMode === 'sick') return 'sick';
-    if (workLog.workMode === 'vacation') return 'vacation';
-    if (workLog.leftAt) return 'finished';
-    if (workLog.lunchStart && !workLog.lunchEnd) return 'lunch';
-    if (workLog.arrivedAt) return 'working';
-    
-    return 'not_started';
+    if (!workLog) return "not_started";
+
+    if (workLog.workMode === "sick") return "sick";
+    if (workLog.workMode === "vacation") return "vacation";
+    if (workLog.leftAt) return "finished";
+    if (workLog.lunchStart && !workLog.lunchEnd) return "lunch";
+    if (workLog.arrivedAt) return "working";
+
+    return "not_started";
   }
 
   formatTeamData(teamData) {
-    const today = moment().format('DD.MM.YYYY');
-    let message = `👥 *Команда на ${today}*\n\n`;
+    const today = moment().format("DD.MM.YYYY");
+    const _message = `👥 *Команда на ${today}*\n\n`;
 
     // Статистика
-    let totalEmployees = 0;
-    let working = 0;
-    let finished = 0;
-    let notStarted = 0;
-    let onLunch = 0;
-    let sick = 0;
-    let onVacation = 0;
-    
+    const _totalEmployees = 0;
+    const _working = 0;
+    const _finished = 0;
+    const _notStarted = 0;
+    const _onLunch = 0;
+    const _sick = 0;
+    const _onVacation = 0;
+
     // Группируем по статусам
     const statusGroups = {
-      'working': [],
-      'lunch': [],
-      'finished': [],
-      'not_started': [],
-      'sick': [],
-      'vacation': []
+      working: [],
+      lunch: [],
+      finished: [],
+      not_started: [],
+      sick: [],
+      vacation: [],
     };
 
-    teamData.forEach(employee => {
-      if (employee.user.role !== 'admin') { // Исключаем админов из общей статистики
+    teamData.forEach((employee) => {
+      if (employee.user.role !== "admin") {
+        // Исключаем админов из общей статистики
         totalEmployees++;
-        
+
         switch (employee.status) {
-          case 'working': working++; break;
-          case 'lunch': onLunch++; break;
-          case 'finished': finished++; break;
-          case 'not_started': notStarted++; break;
-          case 'sick': sick++; break;
-          case 'vacation': onVacation++; break;
+          case "working":
+            working++;
+            break;
+          case "lunch":
+            onLunch++;
+            break;
+          case "finished":
+            finished++;
+            break;
+          case "not_started":
+            notStarted++;
+            break;
+          case "sick":
+            sick++;
+            break;
+          case "vacation":
+            onVacation++;
+            break;
         }
-        
+
         statusGroups[employee.status].push(employee);
       }
     });
 
     // Общая статистика
-    message += '📊 *Общая статистика:*\n';
+    message += "📊 *Общая статистика:*\n";
     message += `👨‍💼 Всего сотрудников: ${totalEmployees}\n`;
     message += `💼 Работают: ${working}\n`;
     message += `🍱 На обеде: ${onLunch}\n`;
@@ -644,20 +726,44 @@ class TimeBot {
     message += `🚫 Не начинали: ${notStarted}\n`;
     if (sick > 0) message += `🤒 Больничный: ${sick}\n`;
     if (onVacation > 0) message += `🏖 Отпуск: ${onVacation}\n`;
-    message += '\n';
+    message += "\n";
 
     // Детализация по статусам
-    message = this.addStatusSection(message, '💼 Работают сейчас:', statusGroups.working);
-    message = this.addStatusSection(message, '🍱 На обеде:', statusGroups.lunch);
-    message = this.addStatusSection(message, '✅ Завершили день:', statusGroups.finished);
-    message = this.addStatusSection(message, '🚫 Ещё не начинали:', statusGroups.not_started);
-    
+    message = this.addStatusSection(
+      message,
+      "💼 Работают сейчас:",
+      statusGroups.working,
+    );
+    message = this.addStatusSection(
+      message,
+      "🍱 На обеде:",
+      statusGroups.lunch,
+    );
+    message = this.addStatusSection(
+      message,
+      "✅ Завершили день:",
+      statusGroups.finished,
+    );
+    message = this.addStatusSection(
+      message,
+      "🚫 Ещё не начинали:",
+      statusGroups.not_started,
+    );
+
     if (statusGroups.sick.length > 0) {
-      message = this.addStatusSection(message, '🤒 Больничный:', statusGroups.sick);
+      message = this.addStatusSection(
+        message,
+        "🤒 Больничный:",
+        statusGroups.sick,
+      );
     }
-    
+
     if (statusGroups.vacation.length > 0) {
-      message = this.addStatusSection(message, '🏖 Отпуск:', statusGroups.vacation);
+      message = this.addStatusSection(
+        message,
+        "🏖 Отпуск:",
+        statusGroups.vacation,
+      );
     }
 
     return message;
@@ -665,30 +771,39 @@ class TimeBot {
 
   addStatusSection(message, title, employees) {
     if (employees.length === 0) return message;
-    
+
     message += `${title}\n`;
-    employees.forEach(emp => {
+    employees.forEach((emp) => {
       const workLog = emp.workLog;
-      const roleIcon = emp.user.role === 'manager' ? '👨‍💼' : '👤';
-      const workModeIcon = workLog?.workMode === 'remote' ? '🏠' : workLog?.workMode === 'office' ? '🏢' : '';
-      
-      let timeInfo = '';
+      const roleIcon = emp.user.role === "manager" ? "👨‍💼" : "👤";
+      const workModeIcon =
+        workLog?.workMode === "remote"
+          ? "🏠"
+          : workLog?.workMode === "office"
+            ? "🏢"
+            : "";
+
+      const _timeInfo = "";
       if (workLog) {
-        const arrival = workLog.arrivedAt ? workLog.arrivedAt.substring(0, 5) : '';
-        const departure = workLog.leftAt ? workLog.leftAt.substring(0, 5) : '';
-        const totalTime = workLog.totalMinutes ? this.formatMinutes(workLog.totalMinutes) : '';
-        
-        if (emp.status === 'finished') {
+        const arrival = workLog.arrivedAt
+          ? workLog.arrivedAt.substring(0, 5)
+          : "";
+        const departure = workLog.leftAt ? workLog.leftAt.substring(0, 5) : "";
+        const totalTime = workLog.totalMinutes
+          ? this.formatMinutes(workLog.totalMinutes)
+          : "";
+
+        if (emp.status === "finished") {
           timeInfo = ` (${arrival}-${departure}, ${totalTime})`;
-        } else if (emp.status === 'working' || emp.status === 'lunch') {
+        } else if (emp.status === "working" || emp.status === "lunch") {
           timeInfo = ` (с ${arrival})`;
         }
       }
-      
+
       message += `${roleIcon} ${emp.user.name} ${workModeIcon}${timeInfo}\n`;
     });
-    message += '\n';
-    
+    message += "\n";
+
     return message;
   }
 
@@ -700,103 +815,132 @@ class TimeBot {
     try {
       // Защита от повторных нажатий
       if (this.isActionOnCooldown(telegramId, data)) {
-        await this.bot.answerCallbackQuery(callbackQuery.id, { 
-          text: '⏳ Подождите немного...',
-          show_alert: false
+        await this.bot.answerCallbackQuery(callbackQuery.id, {
+          text: "⏳ Подождите немного...",
+          show_alert: false,
         });
         return;
       }
 
       const user = await this.getUser(telegramId);
       if (!user) {
-        await this.sendUserFriendlyError(chatId, 'user_not_registered');
+        await this.sendUserFriendlyError(chatId, "user_not_registered");
         await this.bot.answerCallbackQuery(callbackQuery.id);
         return;
       }
 
       // Получаем текущий workLog для валидации
-      const today = moment().format('YYYY-MM-DD');
+      const today = moment().format("YYYY-MM-DD");
       const workLog = await WorkLog.findOne({
-        where: { userId: user.id, workDate: today }
+        where: { userId: user.id, workDate: today },
       });
 
-      let actionType = '';
-      let successMessage = '';
+      const _actionType = "";
+      const _successMessage = "";
 
       switch (data) {
-        case 'arrived_office':
-          actionType = 'mark_arrival';
-          successMessage = '✅ Отмечен приход в офис';
+        case "arrived_office":
+          actionType = "mark_arrival";
+          successMessage = "✅ Отмечен приход в офис";
           break;
-        case 'arrived_remote':
-          actionType = 'mark_arrival';
-          successMessage = '✅ Отмечена удалённая работа';
+        case "arrived_remote":
+          actionType = "mark_arrival";
+          successMessage = "✅ Отмечена удалённая работа";
           break;
-        case 'lunch_start':
-          actionType = 'mark_lunch_start';
-          successMessage = '🍱 Обед начат';
+        case "lunch_start":
+          actionType = "mark_lunch_start";
+          successMessage = "🍱 Обед начат";
           break;
-        case 'lunch_end':
-          actionType = 'mark_lunch_end';
-          successMessage = '🔙 Возвращение с обеда отмечено';
+        case "lunch_end":
+          actionType = "mark_lunch_end";
+          successMessage = "🔙 Возвращение с обеда отмечено";
           break;
-        case 'left_work':
-          actionType = 'mark_leaving';
-          successMessage = '🏠 Рабочий день завершён';
+        case "left_work":
+          actionType = "mark_leaving";
+          successMessage = "🏠 Рабочий день завершён";
           break;
-        case 'sick_day':
+        case "sick_day":
           // Больничный не требует валидации
           await this.markSickDay(chatId, user);
-          await this.bot.answerCallbackQuery(callbackQuery.id, { text: '🤒 Больничный отмечен' });
+          await this.bot.answerCallbackQuery(callbackQuery.id, {
+            text: "🤒 Больничный отмечен",
+          });
           return;
-        case 'vacation_day':
+        case "vacation_day":
           // Отпуск не требует валидации
           await this.markVacationDay(chatId, user);
-          await this.bot.answerCallbackQuery(callbackQuery.id, { text: '🌴 Отпуск отмечен' });
+          await this.bot.answerCallbackQuery(callbackQuery.id, {
+            text: "🌴 Отпуск отмечен",
+          });
           return;
-        case 'my_stats':
+        case "my_stats":
           // Показать статистику с deep links
           await this.showUserStats(chatId, user);
-          await this.bot.answerCallbackQuery(callbackQuery.id, { text: '📊 Статистика' });
+          await this.bot.answerCallbackQuery(callbackQuery.id, {
+            text: "📊 Статистика",
+          });
           return;
-        case 'request_absence':
+        case "request_absence":
           // Подача заявки на отсутствие
           await this.showAbsenceTypes(chatId, user);
-          await this.bot.answerCallbackQuery(callbackQuery.id, { text: '📝 Заявка на отсутствие' });
+          await this.bot.answerCallbackQuery(callbackQuery.id, {
+            text: "📝 Заявка на отсутствие",
+          });
           return;
-        case 'absence_vacation':
-          await this.startAbsenceRequest(chatId, user, 'vacation');
-          await this.bot.answerCallbackQuery(callbackQuery.id, { text: '🌴 Заявка на отпуск' });
+        case "absence_vacation":
+          await this.startAbsenceRequest(chatId, user, "vacation");
+          await this.bot.answerCallbackQuery(callbackQuery.id, {
+            text: "🌴 Заявка на отпуск",
+          });
           return;
-        case 'absence_sick':
-          await this.startAbsenceRequest(chatId, user, 'sick');
-          await this.bot.answerCallbackQuery(callbackQuery.id, { text: '🤒 Заявка на больничный' });
+        case "absence_sick":
+          await this.startAbsenceRequest(chatId, user, "sick");
+          await this.bot.answerCallbackQuery(callbackQuery.id, {
+            text: "🤒 Заявка на больничный",
+          });
           return;
-        case 'absence_business_trip':
-          await this.startAbsenceRequest(chatId, user, 'business_trip');
-          await this.bot.answerCallbackQuery(callbackQuery.id, { text: '🧳 Заявка на командировку' });
+        case "absence_business_trip":
+          await this.startAbsenceRequest(chatId, user, "business_trip");
+          await this.bot.answerCallbackQuery(callbackQuery.id, {
+            text: "🧳 Заявка на командировку",
+          });
           return;
-        case 'absence_day_off':
-          await this.startAbsenceRequest(chatId, user, 'day_off');
-          await this.bot.answerCallbackQuery(callbackQuery.id, { text: '🏠 Заявка на отгул' });
+        case "absence_day_off":
+          await this.startAbsenceRequest(chatId, user, "day_off");
+          await this.bot.answerCallbackQuery(callbackQuery.id, {
+            text: "🏠 Заявка на отгул",
+          });
           return;
-        case 'my_absences':
+        case "my_absences":
           await this.showMyAbsences(chatId, user);
-          await this.bot.answerCallbackQuery(callbackQuery.id, { text: '📋 Мои заявки' });
+          await this.bot.answerCallbackQuery(callbackQuery.id, {
+            text: "📋 Мои заявки",
+          });
           return;
       }
 
       // Обработка управления заявками для менеджеров
-      if (data.startsWith('approve_absence_') || data.startsWith('reject_absence_')) {
+      if (
+        data.startsWith("approve_absence_") ||
+        data.startsWith("reject_absence_")
+      ) {
         await this.handleAbsenceManagement(callbackQuery, user);
         return;
       }
 
       // Валидация действия
       if (actionType) {
-        const validation = await this.validateUserAction(user, actionType, workLog);
+        const validation = await this.validateUserAction(
+          user,
+          actionType,
+          workLog,
+        );
         if (!validation.valid) {
-          await this.sendUserFriendlyError(chatId, validation.errorType, validation.context);
+          await this.sendUserFriendlyError(
+            chatId,
+            validation.errorType,
+            validation.context,
+          );
           await this.bot.answerCallbackQuery(callbackQuery.id);
           return;
         }
@@ -804,32 +948,33 @@ class TimeBot {
 
       // Выполняем действие
       switch (data) {
-        case 'arrived_office':
-          await this.markArrival(chatId, user, 'office');
+        case "arrived_office":
+          await this.markArrival(chatId, user, "office");
           break;
-        case 'arrived_remote':
-          await this.markArrival(chatId, user, 'remote');
+        case "arrived_remote":
+          await this.markArrival(chatId, user, "remote");
           break;
-        case 'lunch_start':
+        case "lunch_start":
           await this.markLunchStart(chatId, user);
           break;
-        case 'lunch_end':
+        case "lunch_end":
           await this.markLunchEnd(chatId, user);
           break;
-        case 'left_work':
+        case "left_work":
           await this.markLeaving(chatId, user);
           break;
       }
 
-      await this.bot.answerCallbackQuery(callbackQuery.id, { 
+      await this.bot.answerCallbackQuery(callbackQuery.id, {
         text: successMessage,
-        show_alert: false
+        show_alert: false,
       });
-
     } catch (error) {
-      console.error('Ошибка в handleCallback:', error);
-      await this.sendUserFriendlyError(chatId, 'database_error');
-      await this.bot.answerCallbackQuery(callbackQuery.id, { text: '❌ Ошибка' });
+      error("Ошибка в handleCallback:", error);
+      await this.sendUserFriendlyError(chatId, "database_error");
+      await this.bot.answerCallbackQuery(callbackQuery.id, {
+        text: "❌ Ошибка",
+      });
     }
   }
 
@@ -838,97 +983,96 @@ class TimeBot {
       // Получаем информацию о пользователе для персонализации
       const telegramId = chatId; // В некоторых случаях может отличаться
       const user = await User.findOne({ where: { telegramId } });
-      
-      let statusInfo = '';
+
+      const _statusInfo = "";
       if (user) {
-        const today = moment().format('YYYY-MM-DD');
+        const today = moment().format("YYYY-MM-DD");
         const workLog = await WorkLog.findOne({
-          where: { userId: user.id, workDate: today }
+          where: { userId: user.id, workDate: today },
         });
-        
+
         if (workLog) {
           const status = this.getEmployeeStatus(workLog);
           const statusEmojis = {
-            'working': '💼 Работаете',
-            'lunch': '🍱 На обеде',  
-            'finished': '✅ День завершён',
-            'not_started': '🌅 Готов к работе',
-            'sick': '🤒 Больничный',
-            'vacation': '🏖 Отпуск'
+            working: "💼 Работаете",
+            lunch: "🍱 На обеде",
+            finished: "✅ День завершён",
+            not_started: "🌅 Готов к работе",
+            sick: "🤒 Больничный",
+            vacation: "🏖 Отпуск",
           };
-          statusInfo = `\n${statusEmojis[status] || '📊 Статус неизвестен'}`;
+          statusInfo = `\n${statusEmojis[status] || "📊 Статус неизвестен"}`;
         } else {
-          statusInfo = '\n🌅 Готов к работе';
+          statusInfo = "\n🌅 Готов к работе";
         }
       }
 
       const keyboard = {
         inline_keyboard: [
           [
-            { text: '✅ Пришёл в офис', callback_data: 'arrived_office' },
-            { text: '🏠 Работаю удалённо', callback_data: 'arrived_remote' }
+            { text: "✅ Пришёл в офис", callback_data: "arrived_office" },
+            { text: "🏠 Работаю удалённо", callback_data: "arrived_remote" },
           ],
           [
-            { text: '🍱 Начал обед', callback_data: 'lunch_start' },
-            { text: '🔙 Вернулся с обеда', callback_data: 'lunch_end' }
+            { text: "🍱 Начал обед", callback_data: "lunch_start" },
+            { text: "🔙 Вернулся с обеда", callback_data: "lunch_end" },
           ],
           [
-            { text: '❌ Ушёл домой', callback_data: 'left_work' },
-            { text: '📊 Моя статистика', callback_data: 'my_stats' }
+            { text: "❌ Ушёл домой", callback_data: "left_work" },
+            { text: "📊 Моя статистика", callback_data: "my_stats" },
           ],
           [
-            { text: '🤒 Больничный', callback_data: 'sick_day' },
-            { text: '🌴 Отпуск', callback_data: 'vacation_day' }
+            { text: "🤒 Больничный", callback_data: "sick_day" },
+            { text: "🌴 Отпуск", callback_data: "vacation_day" },
           ],
-          [
-            { text: '📝 Подать заявку', callback_data: 'request_absence' }
-          ]
-        ]
+          [{ text: "📝 Подать заявку", callback_data: "request_absence" }],
+        ],
       };
 
-      const webAppUrl = process.env.WEB_APP_URL || 'https://your-domain.com';
-      const message = customMessage || 
+      const webAppUrl = process.env.WEB_APP_URL || "https://your-domain.com";
+      const message =
+        customMessage ||
         `🕐 *Управление рабочим временем*${statusInfo}\n\n` +
-        `Выберите действие или перейдите в [📊 Админку](${webAppUrl}/dashboard)`;
+          `Выберите действие или перейдите в [📊 Админку](${webAppUrl}/dashboard)`;
 
-      await this.bot.sendMessage(chatId, message, { 
+      await this.bot.sendMessage(chatId, message, {
         reply_markup: keyboard,
-        parse_mode: 'Markdown'
+        parse_mode: "Markdown",
       });
     } catch (error) {
-      console.error('Ошибка в sendMainMenu:', error);
+      error("Ошибка в sendMainMenu:", error);
       // Fallback to simple menu
       const keyboard = {
         inline_keyboard: [
           [
-            { text: '✅ Пришёл в офис', callback_data: 'arrived_office' },
-            { text: '🏠 Работаю удалённо', callback_data: 'arrived_remote' }
+            { text: "✅ Пришёл в офис", callback_data: "arrived_office" },
+            { text: "🏠 Работаю удалённо", callback_data: "arrived_remote" },
           ],
           [
-            { text: '🍱 Начал обед', callback_data: 'lunch_start' },
-            { text: '🔙 Вернулся с обеда', callback_data: 'lunch_end' }
+            { text: "🍱 Начал обед", callback_data: "lunch_start" },
+            { text: "🔙 Вернулся с обеда", callback_data: "lunch_end" },
           ],
           [
-            { text: '❌ Ушёл домой', callback_data: 'left_work' },
-            { text: '📊 Моя статистика', callback_data: 'my_stats' }
+            { text: "❌ Ушёл домой", callback_data: "left_work" },
+            { text: "📊 Моя статистика", callback_data: "my_stats" },
           ],
           [
-            { text: '🤒 Больничный', callback_data: 'sick_day' },
-            { text: '🌴 Отпуск', callback_data: 'vacation_day' }
+            { text: "🤒 Больничный", callback_data: "sick_day" },
+            { text: "🌴 Отпуск", callback_data: "vacation_day" },
           ],
-          [
-            { text: '📝 Подать заявку', callback_data: 'request_absence' }
-          ]
-        ]
+          [{ text: "📝 Подать заявку", callback_data: "request_absence" }],
+        ],
       };
 
-      await this.bot.sendMessage(chatId, '🕐 Выберите действие:', { reply_markup: keyboard });
+      await this.bot.sendMessage(chatId, "🕐 Выберите действие:", {
+        reply_markup: keyboard,
+      });
     }
   }
 
   async markArrival(chatId, user, mode) {
-    const today = moment().format('YYYY-MM-DD');
-    const currentTime = moment().format('HH:mm:ss');
+    const today = moment().format("YYYY-MM-DD");
+    const currentTime = moment().format("HH:mm:ss");
 
     try {
       const [workLog, created] = await WorkLog.findOrCreate({
@@ -937,144 +1081,152 @@ class TimeBot {
           userId: user.id,
           workDate: today,
           arrivedAt: currentTime,
-          workMode: mode
-        }
+          workMode: mode,
+        },
       });
 
       if (!created) {
         await workLog.update({
           arrivedAt: currentTime,
-          workMode: mode
+          workMode: mode,
         });
       }
 
-      const modeText = mode === 'office' ? 'в офисе' : 'удалённо';
-      const modeEmoji = mode === 'office' ? '🏢' : '🏠';
-      
-      await this.bot.sendMessage(chatId, 
+      const modeText = mode === "office" ? "в офисе" : "удалённо";
+      const modeEmoji = mode === "office" ? "🏢" : "🏠";
+
+      await this.bot.sendMessage(
+        chatId,
         `${modeEmoji} *Начало рабочего дня*\n\n` +
-        `⏰ Время: ${moment().format('HH:mm')}\n` +
-        `💼 Режим: ${modeText}\n` +
-        `📅 Дата: ${moment().format('DD.MM.YYYY')}\n\n` +
-        `Хорошего рабочего дня! 🚀`,
-        { parse_mode: 'Markdown' }
+          `⏰ Время: ${moment().format("HH:mm")}\n` +
+          `💼 Режим: ${modeText}\n` +
+          `📅 Дата: ${moment().format("DD.MM.YYYY")}\n\n` +
+          `Хорошего рабочего дня! 🚀`,
+        { parse_mode: "Markdown" },
       );
     } catch (error) {
-      console.error('Ошибка в markArrival:', error);
-      await this.sendUserFriendlyError(chatId, 'database_error');
+      error("Ошибка в markArrival:", error);
+      await this.sendUserFriendlyError(chatId, "database_error");
     }
   }
 
   async markLunchStart(chatId, user) {
-    const today = moment().format('YYYY-MM-DD');
-    const currentTime = moment().format('HH:mm:ss');
+    const today = moment().format("YYYY-MM-DD");
+    const currentTime = moment().format("HH:mm:ss");
 
     try {
       const workLog = await WorkLog.findOne({
-        where: { userId: user.id, workDate: today }
+        where: { userId: user.id, workDate: today },
       });
 
       await workLog.update({ lunchStart: currentTime });
-      
-      const workDuration = moment(currentTime, 'HH:mm:ss')
-        .diff(moment(workLog.arrivedAt, 'HH:mm:ss'), 'minutes');
-      
-      await this.bot.sendMessage(chatId, 
+
+      const workDuration = moment(currentTime, "HH:mm:ss").diff(
+        moment(workLog.arrivedAt, "HH:mm:ss"),
+        "minutes",
+      );
+
+      await this.bot.sendMessage(
+        chatId,
         `🍱 *Обеденный перерыв*\n\n` +
-        `⏰ Начало: ${moment().format('HH:mm')}\n` +
-        `⏱ Работали: ${this.formatMinutes(workDuration)}\n\n` +
-        `Приятного аппетита! 😋`,
-        { parse_mode: 'Markdown' }
+          `⏰ Начало: ${moment().format("HH:mm")}\n` +
+          `⏱ Работали: ${this.formatMinutes(workDuration)}\n\n` +
+          `Приятного аппетита! 😋`,
+        { parse_mode: "Markdown" },
       );
     } catch (error) {
-      console.error('Ошибка в markLunchStart:', error);
-      await this.sendUserFriendlyError(chatId, 'database_error');
+      error("Ошибка в markLunchStart:", error);
+      await this.sendUserFriendlyError(chatId, "database_error");
     }
   }
 
   async markLunchEnd(chatId, user) {
-    const today = moment().format('YYYY-MM-DD');
-    const currentTime = moment().format('HH:mm:ss');
+    const today = moment().format("YYYY-MM-DD");
+    const currentTime = moment().format("HH:mm:ss");
 
     try {
       const workLog = await WorkLog.findOne({
-        where: { userId: user.id, workDate: today }
+        where: { userId: user.id, workDate: today },
       });
 
       await workLog.update({ lunchEnd: currentTime });
-      
-      const lunchDuration = moment(currentTime, 'HH:mm:ss')
-        .diff(moment(workLog.lunchStart, 'HH:mm:ss'), 'minutes');
 
-      await this.bot.sendMessage(chatId, 
+      const lunchDuration = moment(currentTime, "HH:mm:ss").diff(
+        moment(workLog.lunchStart, "HH:mm:ss"),
+        "minutes",
+      );
+
+      await this.bot.sendMessage(
+        chatId,
         `🔙 *Возвращение с обеда*\n\n` +
-        `⏰ Время: ${moment().format('HH:mm')}\n` +
-        `🍱 Длительность обеда: ${this.formatMinutes(lunchDuration)}\n\n` +
-        `Добро пожаловать обратно! 💪`,
-        { parse_mode: 'Markdown' }
+          `⏰ Время: ${moment().format("HH:mm")}\n` +
+          `🍱 Длительность обеда: ${this.formatMinutes(lunchDuration)}\n\n` +
+          `Добро пожаловать обратно! 💪`,
+        { parse_mode: "Markdown" },
       );
     } catch (error) {
-      console.error('Ошибка в markLunchEnd:', error);
-      await this.sendUserFriendlyError(chatId, 'database_error');
+      error("Ошибка в markLunchEnd:", error);
+      await this.sendUserFriendlyError(chatId, "database_error");
     }
   }
 
   async markLeaving(chatId, user) {
-    const today = moment().format('YYYY-MM-DD');
-    const currentTime = moment().format('HH:mm:ss');
+    const today = moment().format("YYYY-MM-DD");
+    const currentTime = moment().format("HH:mm:ss");
 
     try {
       const workLog = await WorkLog.findOne({
-        where: { userId: user.id, workDate: today }
+        where: { userId: user.id, workDate: today },
       });
 
       // Подсчёт общего времени работы
       const totalMinutes = this.calculateWorkingMinutes(workLog, currentTime);
 
-      await workLog.update({ 
+      await workLog.update({
         leftAt: currentTime,
-        totalMinutes: totalMinutes
+        totalMinutes: totalMinutes,
       });
 
       // Устанавливаем состояние ожидания отчёта
-      this.userStates.set(user.telegramId, { 
-        state: 'waiting_report', 
-        workLogId: workLog.id 
+      this.userStates.set(user.telegramId, {
+        state: "waiting_report",
+        workLogId: workLog.id,
       });
 
       const workStart = workLog.arrivedAt;
-      const workEnd = moment().format('HH:mm');
+      const workEnd = moment().format("HH:mm");
       const modeText = this.getWorkModeText(workLog.workMode);
 
-      await this.bot.sendMessage(chatId, 
+      await this.bot.sendMessage(
+        chatId,
         `🏠 *Завершение рабочего дня*\n\n` +
-        `⏰ Время ухода: ${workEnd}\n` +
-        `📅 Рабочий период: ${workStart} - ${workEnd}\n` +
-        `💼 Режим работы: ${modeText}\n` +
-        `⏱ Отработано сегодня: *${this.formatMinutes(totalMinutes)}*\n\n` +
-        `📝 *Теперь напишите отчёт о проделанной работе:*\n` +
-        `_Опишите основные задачи и достижения за день_`,
-        { parse_mode: 'Markdown' }
+          `⏰ Время ухода: ${workEnd}\n` +
+          `📅 Рабочий период: ${workStart} - ${workEnd}\n` +
+          `💼 Режим работы: ${modeText}\n` +
+          `⏱ Отработано сегодня: *${this.formatMinutes(totalMinutes)}*\n\n` +
+          `📝 *Теперь напишите отчёт о проделанной работе:*\n` +
+          `_Опишите основные задачи и достижения за день_`,
+        { parse_mode: "Markdown" },
       );
     } catch (error) {
-      console.error('Ошибка в markLeaving:', error);
-      await this.sendUserFriendlyError(chatId, 'database_error');
+      error("Ошибка в markLeaving:", error);
+      await this.sendUserFriendlyError(chatId, "database_error");
     }
   }
 
   calculateWorkingMinutes(workLog, leftAt) {
     if (!workLog.arrivedAt) return 0;
 
-    const arrivalTime = moment(workLog.arrivedAt, 'HH:mm:ss');
-    const leaveTime = moment(leftAt, 'HH:mm:ss');
-    
-    let totalMinutes = leaveTime.diff(arrivalTime, 'minutes');
+    const arrivalTime = moment(workLog.arrivedAt, "HH:mm:ss");
+    const leaveTime = moment(leftAt, "HH:mm:ss");
+
+    const _totalMinutes = leaveTime.diff(arrivalTime, "minutes");
 
     // Вычитаем время обеда, если был
     if (workLog.lunchStart && workLog.lunchEnd) {
-      const lunchStart = moment(workLog.lunchStart, 'HH:mm:ss');
-      const lunchEnd = moment(workLog.lunchEnd, 'HH:mm:ss');
-      const lunchMinutes = lunchEnd.diff(lunchStart, 'minutes');
+      const lunchStart = moment(workLog.lunchStart, "HH:mm:ss");
+      const lunchEnd = moment(workLog.lunchEnd, "HH:mm:ss");
+      const lunchMinutes = lunchEnd.diff(lunchStart, "minutes");
       totalMinutes -= lunchMinutes;
     }
 
@@ -1092,67 +1244,80 @@ class TimeBot {
 
       const userState = this.userStates.get(telegramId);
 
-      if (userState && userState.state === 'waiting_report') {
+      if (userState && userState.state === "waiting_report") {
         await this.handleDailyReport(chatId, user, text, userState.workLogId);
         this.userStates.delete(telegramId); // Очищаем состояние
-      } else if (userState && userState.state === 'editing_report') {
-        await this.handleEditDailyReport(chatId, user, text, userState.workLogId);
+      } else if (userState && userState.state === "editing_report") {
+        await this.handleEditDailyReport(
+          chatId,
+          user,
+          text,
+          userState.workLogId,
+        );
         this.userStates.delete(telegramId); // Очищаем состояние
-      } else if (userState && userState.state === 'absence_request') {
+      } else if (userState && userState.state === "absence_request") {
         await this.processAbsenceRequest(chatId, user, text);
-      } else if (userState && userState.state === 'rejecting_absence') {
-        await this.processAbsenceRejection(chatId, user, text, userState.absenceId);
+      } else if (userState && userState.state === "rejecting_absence") {
+        await this.processAbsenceRejection(
+          chatId,
+          user,
+          text,
+          userState.absenceId,
+        );
         this.userStates.delete(telegramId);
       } else {
         // Если пользователь не в состоянии ожидания отчёта, показываем меню
         await this.sendMainMenu(chatId);
       }
     } catch (error) {
-      console.error('Ошибка в handleTextMessage:', error);
-      await this.bot.sendMessage(chatId, '❌ Ошибка обработки сообщения');
+      error("Ошибка в handleTextMessage:", error);
+      await this.bot.sendMessage(chatId, "❌ Ошибка обработки сообщения");
     }
   }
 
   async handleDailyReport(chatId, user, reportText, workLogId) {
     try {
       const workLog = await WorkLog.findByPk(workLogId);
-      
+
       if (!workLog) {
-        return await this.bot.sendMessage(chatId, 
-          '❌ Не удалось найти запись рабочего дня'
+        return await this.bot.sendMessage(
+          chatId,
+          "❌ Не удалось найти запись рабочего дня",
         );
       }
 
       // Проверяем, что отчёт не пустой
       const trimmedReport = reportText.trim();
       if (!trimmedReport) {
-        await workLog.update({ dailyReport: 'Отчёт не предоставлен' });
-        await this.bot.sendMessage(chatId, 
-          '⚠️ Пустой отчёт зафиксирован как пропуск. Хорошего вечера!'
+        await workLog.update({ dailyReport: "Отчёт не предоставлен" });
+        await this.bot.sendMessage(
+          chatId,
+          "⚠️ Пустой отчёт зафиксирован как пропуск. Хорошего вечера!",
         );
       } else {
         await workLog.update({ dailyReport: trimmedReport });
-        await this.bot.sendMessage(chatId, 
-          '✅ Отчёт сохранён! Спасибо за работу, хорошего вечера!'
+        await this.bot.sendMessage(
+          chatId,
+          "✅ Отчёт сохранён! Спасибо за работу, хорошего вечера!",
         );
       }
 
       // Показываем краткую сводку дня
       await this.sendDaySummary(chatId, workLog);
     } catch (error) {
-      console.error('Ошибка в handleDailyReport:', error);
-      await this.bot.sendMessage(chatId, '❌ Ошибка сохранения отчёта');
+      error("Ошибка в handleDailyReport:", error);
+      await this.bot.sendMessage(chatId, "❌ Ошибка сохранения отчёта");
     }
   }
 
   async sendDaySummary(chatId, workLog) {
-    const summary = 
+    const summary =
       `📊 Итоги дня:\n\n` +
       `🟢 Пришёл: ${workLog.arrivedAt}\n` +
       `🔴 Ушёл: ${workLog.leftAt}\n` +
       `⏱ Отработано: ${this.formatMinutes(workLog.totalMinutes)}\n` +
       `💼 Режим: ${this.getWorkModeText(workLog.workMode)}\n` +
-      `📝 Отчёт: ${workLog.dailyReport ? 'Сдан ✅' : 'Не сдан ❌'}`;
+      `📝 Отчёт: ${workLog.dailyReport ? "Сдан ✅" : "Не сдан ❌"}`;
 
     await this.bot.sendMessage(chatId, summary);
   }
@@ -1160,31 +1325,35 @@ class TimeBot {
   async handleEditDailyReport(chatId, user, reportText, workLogId) {
     try {
       const workLog = await WorkLog.findByPk(workLogId);
-      
+
       if (!workLog) {
-        return await this.bot.sendMessage(chatId, 
-          '❌ Не удалось найти запись рабочего дня'
+        return await this.bot.sendMessage(
+          chatId,
+          "❌ Не удалось найти запись рабочего дня",
         );
       }
 
       const trimmedReport = reportText.trim();
       const oldReport = workLog.dailyReport;
-      
-      await workLog.update({ dailyReport: trimmedReport || 'Отчёт не предоставлен' });
-      
-      await this.bot.sendMessage(chatId, 
+
+      await workLog.update({
+        dailyReport: trimmedReport || "Отчёт не предоставлен",
+      });
+
+      await this.bot.sendMessage(
+        chatId,
         `✅ Отчёт обновлён!\n\n` +
-        `📝 Старый: "${oldReport}"\n` +
-        `🆕 Новый: "${workLog.dailyReport}"`
+          `📝 Старый: "${oldReport}"\n` +
+          `🆕 Новый: "${workLog.dailyReport}"`,
       );
     } catch (error) {
-      console.error('Ошибка в handleEditDailyReport:', error);
-      await this.bot.sendMessage(chatId, '❌ Ошибка обновления отчёта');
+      error("Ошибка в handleEditDailyReport:", error);
+      await this.bot.sendMessage(chatId, "❌ Ошибка обновления отчёта");
     }
   }
 
   async markSickDay(chatId, user) {
-    const today = moment().format('YYYY-MM-DD');
+    const today = moment().format("YYYY-MM-DD");
 
     try {
       const [workLog, created] = await WorkLog.findOrCreate({
@@ -1192,39 +1361,40 @@ class TimeBot {
         defaults: {
           userId: user.id,
           workDate: today,
-          workMode: 'sick',
-          dailyReport: 'Больничный день',
-          totalMinutes: 0
-        }
+          workMode: "sick",
+          dailyReport: "Больничный день",
+          totalMinutes: 0,
+        },
       });
 
       if (!created) {
         await workLog.update({
-          workMode: 'sick',
-          dailyReport: 'Больничный день',
+          workMode: "sick",
+          dailyReport: "Больничный день",
           arrivedAt: null,
           leftAt: null,
           lunchStart: null,
           lunchEnd: null,
-          totalMinutes: 0
+          totalMinutes: 0,
         });
       }
 
-      await this.bot.sendMessage(chatId, 
-        '🤒 *Больничный день отмечен*\n\n' +
-        `📅 Дата: ${moment().format('DD.MM.YYYY')}\n` +
-        `💊 Скорейшего выздоровления!\n\n` +
-        `💡 _Вы можете изменить статус в любое время через главное меню_`,
-        { parse_mode: 'Markdown' }
+      await this.bot.sendMessage(
+        chatId,
+        "🤒 *Больничный день отмечен*\n\n" +
+          `📅 Дата: ${moment().format("DD.MM.YYYY")}\n` +
+          `💊 Скорейшего выздоровления!\n\n` +
+          `💡 _Вы можете изменить статус в любое время через главное меню_`,
+        { parse_mode: "Markdown" },
       );
     } catch (error) {
-      console.error('Ошибка в markSickDay:', error);
-      await this.sendUserFriendlyError(chatId, 'database_error');
+      error("Ошибка в markSickDay:", error);
+      await this.sendUserFriendlyError(chatId, "database_error");
     }
   }
 
   async markVacationDay(chatId, user) {
-    const today = moment().format('YYYY-MM-DD');
+    const today = moment().format("YYYY-MM-DD");
 
     try {
       const [workLog, created] = await WorkLog.findOrCreate({
@@ -1232,88 +1402,89 @@ class TimeBot {
         defaults: {
           userId: user.id,
           workDate: today,
-          workMode: 'vacation',
-          dailyReport: 'Отпуск',
-          totalMinutes: 0
-        }
+          workMode: "vacation",
+          dailyReport: "Отпуск",
+          totalMinutes: 0,
+        },
       });
 
       if (!created) {
         await workLog.update({
-          workMode: 'vacation',
-          dailyReport: 'Отпуск',
+          workMode: "vacation",
+          dailyReport: "Отпуск",
           arrivedAt: null,
           leftAt: null,
           lunchStart: null,
           lunchEnd: null,
-          totalMinutes: 0
+          totalMinutes: 0,
         });
       }
 
-      await this.bot.sendMessage(chatId, 
-        '🌴 *Отпускной день отмечен*\n\n' +
-        `📅 Дата: ${moment().format('DD.MM.YYYY')}\n` +
-        `🏖 Приятного отдыха!\n\n` +
-        `💡 _Вы можете изменить статус в любое время через главное меню_`,
-        { parse_mode: 'Markdown' }
+      await this.bot.sendMessage(
+        chatId,
+        "🌴 *Отпускной день отмечен*\n\n" +
+          `📅 Дата: ${moment().format("DD.MM.YYYY")}\n` +
+          `🏖 Приятного отдыха!\n\n` +
+          `💡 _Вы можете изменить статус в любое время через главное меню_`,
+        { parse_mode: "Markdown" },
       );
     } catch (error) {
-      console.error('Ошибка в markVacationDay:', error);
-      await this.sendUserFriendlyError(chatId, 'database_error');
+      error("Ошибка в markVacationDay:", error);
+      await this.sendUserFriendlyError(chatId, "database_error");
     }
   }
 
   async showUserStats(chatId, user) {
     try {
-      await this.bot.sendChatAction(chatId, 'typing');
-      
-      const today = moment().format('YYYY-MM-DD');
-      const webAppUrl = process.env.WEB_APP_URL || 'https://your-domain.com';
-      
+      await this.bot.sendChatAction(chatId, "typing");
+
+      const today = moment().format("YYYY-MM-DD");
+      const webAppUrl = process.env.WEB_APP_URL || "https://your-domain.com";
+
       // Получаем данные за сегодня
       const todayWorkLog = await WorkLog.findOne({
-        where: { userId: user.id, workDate: today }
+        where: { userId: user.id, workDate: today },
       });
 
       // Получаем данные за текущую неделю
-      const startOfWeek = moment().startOf('isoWeek').format('YYYY-MM-DD');
-      const endOfWeek = moment().endOf('isoWeek').format('YYYY-MM-DD');
+      const startOfWeek = moment().startOf("isoWeek").format("YYYY-MM-DD");
+      const endOfWeek = moment().endOf("isoWeek").format("YYYY-MM-DD");
 
-      const { Op } = require('sequelize');
+      const { Op } = require("sequelize");
       const weekLogs = await WorkLog.findAll({
         where: {
           userId: user.id,
           workDate: {
-            [Op.between]: [startOfWeek, endOfWeek]
-          }
-        }
+            [Op.between]: [startOfWeek, endOfWeek],
+          },
+        },
       });
 
-      let weekTotal = 0;
-      let weekDays = 0;
-      weekLogs.forEach(log => {
-        if (log.workMode === 'office' || log.workMode === 'remote') {
+      const _weekTotal = 0;
+      const _weekDays = 0;
+      weekLogs.forEach((log) => {
+        if (log.workMode === "office" || log.workMode === "remote") {
           weekTotal += log.totalMinutes || 0;
           weekDays++;
         }
       });
 
-      let message = `📊 *Ваша статистика*\n\n`;
-      
+      const _message = `📊 *Ваша статистика*\n\n`;
+
       // Сегодняшний день
-      message += `📅 *Сегодня (${moment().format('DD.MM.YYYY')}):*\n`;
+      message += `📅 *Сегодня (${moment().format("DD.MM.YYYY")}):*\n`;
       if (todayWorkLog) {
         const status = this.getEmployeeStatus(todayWorkLog);
         const statusEmojis = {
-          'working': '💼 Работаете',
-          'lunch': '🍱 На обеде',  
-          'finished': '✅ День завершён',
-          'not_started': '🌅 Не начат',
-          'sick': '🤒 Больничный',
-          'vacation': '🌴 Отпуск'
+          working: "💼 Работаете",
+          lunch: "🍱 На обеде",
+          finished: "✅ День завершён",
+          not_started: "🌅 Не начат",
+          sick: "🤒 Больничный",
+          vacation: "🌴 Отпуск",
         };
-        
-        message += `   ${statusEmojis[status] || '📊 Статус неизвестен'}\n`;
+
+        message += `   ${statusEmojis[status] || "📊 Статус неизвестен"}\n`;
         if (todayWorkLog.totalMinutes) {
           message += `   ⏱ Время: ${this.formatMinutes(todayWorkLog.totalMinutes)}\n`;
         }
@@ -1341,18 +1512,20 @@ class TimeBot {
       message += `📊 [Аналитика и графики](${webAppUrl}/analytics)\n`;
       message += `📋 [Личный профиль](${webAppUrl}/employees/${user.id})\n`;
       message += `📝 [История работы](${webAppUrl}/work-logs)\n`;
-      if (user.role === 'manager' || user.role === 'admin') {
+      if (user.role === "manager" || user.role === "admin") {
         message += `👥 [Управление командой](${webAppUrl}/users)\n`;
         message += `📈 [Панель управления](${webAppUrl}/dashboard)\n`;
       }
 
-      await this.bot.sendMessage(chatId, message, { 
-        parse_mode: 'Markdown',
-        disable_web_page_preview: true 
+      await this.bot.sendMessage(chatId, message, {
+        parse_mode: "Markdown",
+        disable_web_page_preview: true,
       });
     } catch (error) {
-      console.error('Ошибка в showUserStats:', error);
-      await this.sendUserFriendlyError(chatId, 'stats_error', { statsType: 'user' });
+      error("Ошибка в showUserStats:", error);
+      await this.sendUserFriendlyError(chatId, "stats_error", {
+        statsType: "user",
+      });
     }
   }
 
@@ -1361,35 +1534,36 @@ class TimeBot {
   }
 
   async sendNotRegistered(chatId) {
-    await this.bot.sendMessage(chatId, 
-      '❌ Вы не зарегистрированы. Используйте команду /start'
+    await this.bot.sendMessage(
+      chatId,
+      "❌ Вы не зарегистрированы. Используйте команду /start",
     );
   }
 
   getRoleText(role) {
     const roles = {
-      'employee': 'Сотрудник',
-      'manager': 'Менеджер',
-      'admin': 'Администратор'
+      employee: "Сотрудник",
+      manager: "Менеджер",
+      admin: "Администратор",
     };
-    return roles[role] || 'Неизвестная роль';
+    return roles[role] || "Неизвестная роль";
   }
 
   getWorkModeText(mode) {
     const modes = {
-      'office': 'Офис',
-      'remote': 'Удалённо',
-      'sick': 'Больничный',
-      'vacation': 'Отпуск'
+      office: "Офис",
+      remote: "Удалённо",
+      sick: "Больничный",
+      vacation: "Отпуск",
     };
-    return modes[mode] || 'Неизвестно';
+    return modes[mode] || "Неизвестно";
   }
 
   formatMinutes(minutes) {
-    if (!minutes) return '0м';
+    if (!minutes) return "0м";
     const hours = Math.floor(minutes / 60);
     const mins = minutes % 60;
-    
+
     if (hours > 0) {
       return `${hours}ч ${mins}м`;
     }
@@ -1400,43 +1574,44 @@ class TimeBot {
   getLastWorkingDays(count) {
     const workingDays = [];
     const today = moment();
-    let current = today.clone();
+    const current = today.clone();
 
     while (workingDays.length < count) {
       // Если сегодня рабочий день или ищем предыдущие дни
-      if (current.isoWeekday() <= 5) { // Понедельник = 1, Пятница = 5
+      if (current.isoWeekday() <= 5) {
+        // Понедельник = 1, Пятница = 5
         workingDays.unshift(current.clone());
       }
-      current.subtract(1, 'day');
+      current.subtract(1, "day");
     }
 
     return workingDays;
   }
 
   // Защита от повторных нажатий
-  isActionOnCooldown(userId, action, cooldownMs = 2000) {
+  isActionOnCooldown(userId, action, cooldownMs = COOLDOWN_LIMITS.DEFAULT) {
     const key = `${userId}_${action}`;
     const now = Date.now();
     const lastAction = this.actionCooldowns.get(key);
-    
-    if (lastAction && (now - lastAction) < cooldownMs) {
+
+    if (lastAction && now - lastAction < cooldownMs) {
       return true;
     }
-    
+
     this.actionCooldowns.set(key, now);
-    
+
     // Очищаем старые записи (каждые 10 минут)
     if (Math.random() < 0.01) {
       this.cleanupCooldowns();
     }
-    
+
     return false;
   }
 
   cleanupCooldowns() {
     const now = Date.now();
-    const maxAge = 10 * 60 * 1000; // 10 минут
-    
+    const maxAge = 10 * TIME_CONSTANTS.MINUTE; // 10 минут
+
     for (const [key, timestamp] of this.actionCooldowns.entries()) {
       if (now - timestamp > maxAge) {
         this.actionCooldowns.delete(key);
@@ -1447,28 +1622,32 @@ class TimeBot {
   // Улучшенные сообщения об ошибках
   async sendUserFriendlyError(chatId, errorType, context = {}) {
     const errorMessages = {
-      'already_arrived': '⏰ Вы уже отметились сегодня! Время прихода: {time}',
-      'already_left': '🏠 Вы уже завершили рабочий день в {time}',
-      'need_arrival': '⚠️ Сначала отметьтесь как пришедший на работу',
-      'already_lunch_started': '🍱 Обед уже начат в {time}',
-      'already_lunch_ended': '🔙 Возвращение с обеда уже отмечено в {time}',
-      'need_lunch_start': '⚠️ Сначала отметьте начало обеда',
-      'no_work_log': '📝 Сегодня нет записей рабочего времени',
-      'need_finish_day': '⏰ Сначала завершите рабочий день кнопкой "Ушёл домой"',
-      'action_cooldown': '⏳ Подождите немного перед следующим действием',
-      'permission_denied': '🔒 У вас нет прав для выполнения этой команды',
-      'user_not_registered': '❌ Сначала нужно зарегистрироваться командой /start',
-      'database_error': '💾 Проблемы с базой данных. Попробуйте ещё раз',
-      'network_error': '🌐 Проблемы с подключением. Проверьте интернет и попробуйте снова',
-      'invalid_worklog_state': '⚠️ Действие невозможно в текущем состоянии рабочего дня',
-      'command_error': '❌ Ошибка выполнения команды {command}. Попробуйте позже',
-      'stats_error': '📊 Не удалось получить статистику {statsType}. Проверьте подключение'
+      already_arrived: "⏰ Вы уже отметились сегодня! Время прихода: {time}",
+      already_left: "🏠 Вы уже завершили рабочий день в {time}",
+      need_arrival: "⚠️ Сначала отметьтесь как пришедший на работу",
+      already_lunch_started: "🍱 Обед уже начат в {time}",
+      already_lunch_ended: "🔙 Возвращение с обеда уже отмечено в {time}",
+      need_lunch_start: "⚠️ Сначала отметьте начало обеда",
+      no_work_log: "📝 Сегодня нет записей рабочего времени",
+      need_finish_day: '⏰ Сначала завершите рабочий день кнопкой "Ушёл домой"',
+      action_cooldown: "⏳ Подождите немного перед следующим действием",
+      permission_denied: "🔒 У вас нет прав для выполнения этой команды",
+      user_not_registered:
+        "❌ Сначала нужно зарегистрироваться командой /start",
+      database_error: "💾 Проблемы с базой данных. Попробуйте ещё раз",
+      network_error:
+        "🌐 Проблемы с подключением. Проверьте интернет и попробуйте снова",
+      invalid_worklog_state:
+        "⚠️ Действие невозможно в текущем состоянии рабочего дня",
+      command_error: "❌ Ошибка выполнения команды {command}. Попробуйте позже",
+      stats_error:
+        "📊 Не удалось получить статистику {statsType}. Проверьте подключение",
     };
 
-    let message = errorMessages[errorType] || '❌ Произошла неизвестная ошибка';
-    
+    const _message = errorMessages[errorType] || "❌ Произошла неизвестная ошибка";
+
     // Подставляем контекстные данные
-    Object.keys(context).forEach(key => {
+    Object.keys(context).forEach((key) => {
       message = message.replace(`{${key}}`, context[key]);
     });
 
@@ -1478,26 +1657,34 @@ class TimeBot {
   // Валидация состояния пользователя перед действием
   async validateUserAction(user, action, workLog = null) {
     const validationRules = {
-      'arrive': {
+      arrive: {
         condition: !workLog || !workLog.arrivedAt,
-        error: 'already_arrived',
-        context: workLog && workLog.arrivedAt ? { time: workLog.arrivedAt } : {}
+        error: "already_arrived",
+        context:
+          workLog && workLog.arrivedAt ? { time: workLog.arrivedAt } : {},
       },
-      'lunch_start': {
+      lunch_start: {
         condition: workLog && workLog.arrivedAt && !workLog.lunchStart,
-        error: !workLog || !workLog.arrivedAt ? 'need_arrival' : 'already_lunch_started',
-        context: workLog && workLog.lunchStart ? { time: workLog.lunchStart } : {}
+        error:
+          !workLog || !workLog.arrivedAt
+            ? "need_arrival"
+            : "already_lunch_started",
+        context:
+          workLog && workLog.lunchStart ? { time: workLog.lunchStart } : {},
       },
-      'lunch_end': {
+      lunch_end: {
         condition: workLog && workLog.lunchStart && !workLog.lunchEnd,
-        error: !workLog || !workLog.lunchStart ? 'need_lunch_start' : 'already_lunch_ended',
-        context: workLog && workLog.lunchEnd ? { time: workLog.lunchEnd } : {}
+        error:
+          !workLog || !workLog.lunchStart
+            ? "need_lunch_start"
+            : "already_lunch_ended",
+        context: workLog && workLog.lunchEnd ? { time: workLog.lunchEnd } : {},
       },
-      'leave': {
+      leave: {
         condition: workLog && workLog.arrivedAt && !workLog.leftAt,
-        error: !workLog || !workLog.arrivedAt ? 'need_arrival' : 'already_left',
-        context: workLog && workLog.leftAt ? { time: workLog.leftAt } : {}
-      }
+        error: !workLog || !workLog.arrivedAt ? "need_arrival" : "already_left",
+        context: workLog && workLog.leftAt ? { time: workLog.leftAt } : {},
+      },
     };
 
     const rule = validationRules[action];
@@ -1507,7 +1694,7 @@ class TimeBot {
       return {
         valid: false,
         error: rule.error,
-        context: rule.context
+        context: rule.context,
       };
     }
 
@@ -1526,8 +1713,10 @@ class TimeBot {
 
       await this.showAbsenceTypes(chatId, user);
     } catch (error) {
-      console.error('Ошибка в handleAbsence:', error);
-      await this.sendUserFriendlyError(chatId, 'command_error', { command: 'absence' });
+      error("Ошибка в handleAbsence:", error);
+      await this.sendUserFriendlyError(chatId, "command_error", {
+        command: "absence",
+      });
     }
   }
 
@@ -1541,8 +1730,10 @@ class TimeBot {
 
       await this.showMyAbsences(chatId, user);
     } catch (error) {
-      console.error('Ошибка в handleAbsences:', error);
-      await this.sendUserFriendlyError(chatId, 'command_error', { command: 'absences' });
+      error("Ошибка в handleAbsences:", error);
+      await this.sendUserFriendlyError(chatId, "command_error", {
+        command: "absences",
+      });
     }
   }
 
@@ -1550,26 +1741,23 @@ class TimeBot {
     const keyboard = {
       inline_keyboard: [
         [
-          { text: '🌴 Отпуск', callback_data: 'absence_vacation' },
-          { text: '🤒 Больничный', callback_data: 'absence_sick' }
+          { text: "🌴 Отпуск", callback_data: "absence_vacation" },
+          { text: "🤒 Больничный", callback_data: "absence_sick" },
         ],
         [
-          { text: '🧳 Командировка', callback_data: 'absence_business_trip' },
-          { text: '🏠 Отгул', callback_data: 'absence_day_off' }
+          { text: "🧳 Командировка", callback_data: "absence_business_trip" },
+          { text: "🏠 Отгул", callback_data: "absence_day_off" },
         ],
-        [
-          { text: '📋 Мои заявки', callback_data: 'my_absences' }
-        ]
-      ]
+        [{ text: "📋 Мои заявки", callback_data: "my_absences" }],
+      ],
     };
 
-    const message = 
-      `📝 *Подача заявки на отсутствие*\n\n` +
-      `Выберите тип заявки:`;
+    const message =
+      `📝 *Подача заявки на отсутствие*\n\n` + `Выберите тип заявки:`;
 
-    await this.bot.sendMessage(chatId, message, { 
+    await this.bot.sendMessage(chatId, message, {
       reply_markup: keyboard,
-      parse_mode: 'Markdown'
+      parse_mode: "Markdown",
     });
   }
 
@@ -1577,176 +1765,186 @@ class TimeBot {
     try {
       const absences = await Absence.findAll({
         where: { userId: user.id },
-        order: [['createdAt', 'DESC']],
+        order: [["createdAt", "DESC"]],
         limit: 10,
-        include: [{
-          model: User,
-          as: 'approver',
-          attributes: ['name'],
-          required: false
-        }]
+        include: [
+          {
+            model: User,
+            as: "approver",
+            attributes: ["name"],
+            required: false,
+          },
+        ],
       });
 
       if (absences.length === 0) {
-        return await this.bot.sendMessage(chatId, 
-          '📋 У вас пока нет поданных заявок\n\n' +
-          'Используйте кнопку "📝 Подать заявку" в главном меню'
+        return await this.bot.sendMessage(
+          chatId,
+          "📋 У вас пока нет поданных заявок\n\n" +
+            'Используйте кнопку "📝 Подать заявку" в главном меню',
         );
       }
 
-      let message = `📋 *Ваши заявки на отсутствие*\n\n`;
+      const _message = `📋 *Ваши заявки на отсутствие*\n\n`;
 
       absences.forEach((absence, index) => {
         const statusEmoji = {
-          'pending': '⏳',
-          'approved': '✅',
-          'rejected': '❌'
+          pending: "⏳",
+          approved: "✅",
+          rejected: "❌",
         }[absence.status];
 
         const typeEmoji = {
-          'vacation': '🌴',
-          'sick': '🤒',
-          'business_trip': '🧳',
-          'day_off': '🏠'
+          vacation: "🌴",
+          sick: "🤒",
+          business_trip: "🧳",
+          day_off: "🏠",
         }[absence.type];
 
         const statusText = {
-          'pending': 'На рассмотрении',
-          'approved': 'Одобрена',
-          'rejected': 'Отклонена'
+          pending: "На рассмотрении",
+          approved: "Одобрена",
+          rejected: "Отклонена",
         }[absence.status];
 
         const typeText = {
-          'vacation': 'Отпуск',
-          'sick': 'Больничный', 
-          'business_trip': 'Командировка',
-          'day_off': 'Отгул'
+          vacation: "Отпуск",
+          sick: "Больничный",
+          business_trip: "Командировка",
+          day_off: "Отгул",
         }[absence.type];
 
         message += `${index + 1}. ${typeEmoji} ${typeText}\n`;
-        message += `   📅 ${moment(absence.startDate).format('DD.MM.YY')} - ${moment(absence.endDate).format('DD.MM.YY')} (${absence.daysCount} дн.)\n`;
+        message += `   📅 ${moment(absence.startDate).format("DD.MM.YY")} - ${moment(absence.endDate).format("DD.MM.YY")} (${absence.daysCount} дн.)\n`;
         message += `   ${statusEmoji} ${statusText}`;
-        
-        if (absence.status === 'approved' && absence.approver) {
+
+        if (absence.status === "approved" && absence.approver) {
           message += ` (${absence.approver.name})`;
         }
-        
-        if (absence.status === 'rejected' && absence.rejectionReason) {
+
+        if (absence.status === "rejected" && absence.rejectionReason) {
           message += `\n   💬 ${absence.rejectionReason}`;
         }
-        
-        message += '\n\n';
+
+        message += "\n\n";
       });
 
-      const webAppUrl = process.env.WEB_APP_URL || 'https://your-domain.com';
+      const webAppUrl = process.env.WEB_APP_URL || "https://your-domain.com";
       message += `🔗 [Подробнее в админке](${webAppUrl}/absences)`;
 
-      await this.bot.sendMessage(chatId, message, { 
-        parse_mode: 'Markdown',
-        disable_web_page_preview: true 
+      await this.bot.sendMessage(chatId, message, {
+        parse_mode: "Markdown",
+        disable_web_page_preview: true,
       });
     } catch (error) {
-      console.error('Ошибка в showMyAbsences:', error);
-      await this.sendUserFriendlyError(chatId, 'database_error');
+      error("Ошибка в showMyAbsences:", error);
+      await this.sendUserFriendlyError(chatId, "database_error");
     }
   }
 
   async startAbsenceRequest(chatId, user, type) {
     const typeText = {
-      'vacation': 'отпуск',
-      'sick': 'больничный',
-      'business_trip': 'командировку',
-      'day_off': 'отгул'
+      vacation: "отпуск",
+      sick: "больничный",
+      business_trip: "командировку",
+      day_off: "отгул",
     }[type];
 
     const typeEmoji = {
-      'vacation': '🌴',
-      'sick': '🤒',
-      'business_trip': '🧳', 
-      'day_off': '🏠'
+      vacation: "🌴",
+      sick: "🤒",
+      business_trip: "🧳",
+      day_off: "🏠",
     }[type];
 
     // Устанавливаем состояние для сбора данных
-    this.userStates.set(user.telegramId, { 
-      state: 'absence_request',
+    this.userStates.set(user.telegramId, {
+      state: "absence_request",
       type: type,
-      step: 'start_date'
+      step: "start_date",
     });
 
-    await this.bot.sendMessage(chatId,
+    await this.bot.sendMessage(
+      chatId,
       `${typeEmoji} *Заявка на ${typeText}*\n\n` +
-      `📅 Укажите дату начала в формате ДД.ММ.ГГГГ\n` +
-      `Например: 25.12.2024\n\n` +
-      `Или отправьте /cancel для отмены`,
-      { parse_mode: 'Markdown' }
+        `📅 Укажите дату начала в формате ДД.ММ.ГГГГ\n` +
+        `Например: 25.12.LIMITS.DEFAULT_PAGE_SIZE24\n\n` +
+        `Или отправьте /cancel для отмены`,
+      { parse_mode: "Markdown" },
     );
   }
 
   async processAbsenceRequest(chatId, user, text) {
     const state = this.userStates.get(user.telegramId);
-    if (!state || state.state !== 'absence_request') return;
+    if (!state || state.state !== "absence_request") return;
 
     try {
       switch (state.step) {
-        case 'start_date':
+        case "start_date":
           const startDate = this.parseDate(text);
           if (!startDate) {
-            return await this.bot.sendMessage(chatId,
-              '❌ Неверный формат даты. Используйте ДД.ММ.ГГГГ\n' +
-              'Например: 25.12.2024'
+            return await this.bot.sendMessage(
+              chatId,
+              "❌ Неверный формат даты. Используйте ДД.ММ.ГГГГ\n" +
+                "Например: 25.12.LIMITS.DEFAULT_PAGE_SIZE24",
             );
           }
 
           state.startDate = startDate;
-          state.step = 'end_date';
+          state.step = "end_date";
           this.userStates.set(user.telegramId, state);
 
-          await this.bot.sendMessage(chatId,
-            `✅ Дата начала: ${moment(startDate).format('DD.MM.YYYY')}\n\n` +
-            `📅 Теперь укажите дату окончания в формате ДД.ММ.ГГГГ`
+          await this.bot.sendMessage(
+            chatId,
+            `✅ Дата начала: ${moment(startDate).format("DD.MM.YYYY")}\n\n` +
+              `📅 Теперь укажите дату окончания в формате ДД.ММ.ГГГГ`,
           );
           break;
 
-        case 'end_date':
+        case "end_date":
           const endDate = this.parseDate(text);
           if (!endDate) {
-            return await this.bot.sendMessage(chatId,
-              '❌ Неверный формат даты. Используйте ДД.ММ.ГГГГ\n' +
-              'Например: 28.12.2024'
+            return await this.bot.sendMessage(
+              chatId,
+              "❌ Неверный формат даты. Используйте ДД.ММ.ГГГГ\n" +
+                "Например: 28.12.LIMITS.DEFAULT_PAGE_SIZE24",
             );
           }
 
           if (moment(endDate).isBefore(moment(state.startDate))) {
-            return await this.bot.sendMessage(chatId,
-              '❌ Дата окончания не может быть раньше даты начала'
+            return await this.bot.sendMessage(
+              chatId,
+              "❌ Дата окончания не может быть раньше даты начала",
             );
           }
 
           state.endDate = endDate;
-          state.step = 'reason';
+          state.step = "reason";
           this.userStates.set(user.telegramId, state);
 
-          const days = moment(endDate).diff(moment(state.startDate), 'days') + 1;
-          await this.bot.sendMessage(chatId,
-            `✅ Период: ${moment(state.startDate).format('DD.MM.YYYY')} - ${moment(endDate).format('DD.MM.YYYY')} (${days} дн.)\n\n` +
-            `💬 Укажите причину или комментарий к заявке\n` +
-            `(необязательно, можете отправить "-" чтобы пропустить)`
+          const days =
+            moment(endDate).diff(moment(state.startDate), "days") + 1;
+          await this.bot.sendMessage(
+            chatId,
+            `✅ Период: ${moment(state.startDate).format("DD.MM.YYYY")} - ${moment(endDate).format("DD.MM.YYYY")} (${days} дн.)\n\n` +
+              `💬 Укажите причину или комментарий к заявке\n` +
+              `(необязательно, можете отправить "-" чтобы пропустить)`,
           );
           break;
 
-        case 'reason':
-          const reason = text === '-' ? null : text;
+        case "reason":
+          const reason = text === "-" ? null : text;
           state.reason = reason;
-          
+
           // Создаём заявку
           await this.createAbsenceRequest(chatId, user, state);
           this.userStates.delete(user.telegramId);
           break;
       }
     } catch (error) {
-      console.error('Ошибка в processAbsenceRequest:', error);
+      error("Ошибка в processAbsenceRequest:", error);
       this.userStates.delete(user.telegramId);
-      await this.sendUserFriendlyError(chatId, 'database_error');
+      await this.sendUserFriendlyError(chatId, "database_error");
     }
   }
 
@@ -1758,54 +1956,54 @@ class TimeBot {
         startDate: requestData.startDate,
         endDate: requestData.endDate,
         reason: requestData.reason,
-        status: 'pending'
+        status: "pending",
       });
 
       const typeText = {
-        'vacation': 'отпуск',
-        'sick': 'больничный',
-        'business_trip': 'командировку',
-        'day_off': 'отгул'
+        vacation: "отпуск",
+        sick: "больничный",
+        business_trip: "командировку",
+        day_off: "отгул",
       }[requestData.type];
 
       const typeEmoji = {
-        'vacation': '🌴',
-        'sick': '🤒',
-        'business_trip': '🧳',
-        'day_off': '🏠'
+        vacation: "🌴",
+        sick: "🤒",
+        business_trip: "🧳",
+        day_off: "🏠",
       }[requestData.type];
 
-      await this.bot.sendMessage(chatId,
+      await this.bot.sendMessage(
+        chatId,
         `✅ *Заявка подана успешно!*\n\n` +
-        `${typeEmoji} Тип: ${typeText}\n` +
-        `📅 Период: ${moment(absence.startDate).format('DD.MM.YYYY')} - ${moment(absence.endDate).format('DD.MM.YYYY')}\n` +
-        `📊 Дней: ${absence.daysCount}\n` +
-        `💬 Причина: ${absence.reason || 'Не указана'}\n\n` +
-        `⏳ Статус: На рассмотрении\n\n` +
-        `📱 Вы получите уведомление, когда заявка будет рассмотрена`,
-        { parse_mode: 'Markdown' }
+          `${typeEmoji} Тип: ${typeText}\n` +
+          `📅 Период: ${moment(absence.startDate).format("DD.MM.YYYY")} - ${moment(absence.endDate).format("DD.MM.YYYY")}\n` +
+          `📊 Дней: ${absence.daysCount}\n` +
+          `💬 Причина: ${absence.reason || "Не указана"}\n\n` +
+          `⏳ Статус: На рассмотрении\n\n` +
+          `📱 Вы получите уведомление, когда заявка будет рассмотрена`,
+        { parse_mode: "Markdown" },
       );
 
       // Отправляем событие для уведомления менеджеров
-      emitEvent('absence.created', {
+      emitEvent("absence.created", {
         absence: absence,
         user: user,
-        timestamp: new Date()
+        timestamp: new Date(),
       });
-
     } catch (error) {
-      console.error('Ошибка создания заявки:', error);
-      await this.sendUserFriendlyError(chatId, 'database_error');
+      error("Ошибка создания заявки:", error);
+      await this.sendUserFriendlyError(chatId, "database_error");
     }
   }
 
   parseDate(dateStr) {
     // Поддерживаем форматы: ДД.ММ.ГГГГ, ДД/ММ/ГГГГ, ДД-ММ-ГГГГ
-    const formats = ['DD.MM.YYYY', 'DD/MM/YYYY', 'DD-MM-YYYY'];
+    const formats = ["DD.MM.YYYY", "DD/MM/YYYY", "DD-MM-YYYY"];
     for (const format of formats) {
       const parsed = moment(dateStr, format, true);
       if (parsed.isValid()) {
-        return parsed.format('YYYY-MM-DD');
+        return parsed.format("YYYY-MM-DD");
       }
     }
     return null;
@@ -1819,73 +2017,75 @@ class TimeBot {
 
     try {
       // Проверяем права менеджера
-      if (user.role !== 'manager' && user.role !== 'admin') {
-        await this.bot.answerCallbackQuery(callbackQuery.id, { 
-          text: '❌ Недостаточно прав', 
-          show_alert: true 
+      if (user.role !== "manager" && user.role !== "admin") {
+        await this.bot.answerCallbackQuery(callbackQuery.id, {
+          text: "❌ Недостаточно прав",
+          show_alert: true,
         });
         return;
       }
 
-      const absenceId = data.split('_')[2];
-      const action = data.startsWith('approve_') ? 'approved' : 'rejected';
+      const absenceId = data.split("_")[2];
+      const action = data.startsWith("approve_") ? "approved" : "rejected";
 
       // Получаем заявку
       const absence = await Absence.findByPk(absenceId, {
-        include: [{
-          model: User,
-          as: 'user',
-          attributes: ['id', 'name', 'telegramId']
-        }]
+        include: [
+          {
+            model: User,
+            as: "user",
+            attributes: ["id", "name", "telegramId"],
+          },
+        ],
       });
 
       if (!absence) {
-        await this.bot.answerCallbackQuery(callbackQuery.id, { 
-          text: '❌ Заявка не найдена', 
-          show_alert: true 
+        await this.bot.answerCallbackQuery(callbackQuery.id, {
+          text: "❌ Заявка не найдена",
+          show_alert: true,
         });
         return;
       }
 
-      if (absence.status !== 'pending') {
-        await this.bot.answerCallbackQuery(callbackQuery.id, { 
-          text: '❌ Заявка уже рассмотрена', 
-          show_alert: true 
+      if (absence.status !== "pending") {
+        await this.bot.answerCallbackQuery(callbackQuery.id, {
+          text: "❌ Заявка уже рассмотрена",
+          show_alert: true,
         });
         return;
       }
 
-      if (action === 'rejected') {
+      if (action === "rejected") {
         // Для отклонения нужна причина - запрашиваем её
         this.userStates.set(user.telegramId, {
-          state: 'rejecting_absence',
-          absenceId: absenceId
+          state: "rejecting_absence",
+          absenceId: absenceId,
         });
 
-        await this.bot.sendMessage(chatId,
-          '💬 *Укажите причину отклонения заявки:*\n\n' +
-          'Напишите причину или отправьте /cancel для отмены',
-          { parse_mode: 'Markdown' }
+        await this.bot.sendMessage(
+          chatId,
+          "💬 *Укажите причину отклонения заявки:*\n\n" +
+            "Напишите причину или отправьте /cancel для отмены",
+          { parse_mode: "Markdown" },
         );
 
-        await this.bot.answerCallbackQuery(callbackQuery.id, { 
-          text: '💬 Укажите причину отклонения' 
+        await this.bot.answerCallbackQuery(callbackQuery.id, {
+          text: "💬 Укажите причину отклонения",
         });
         return;
       }
 
       // Одобряем заявку
-      await this.processAbsenceDecision(absenceId, user, 'approved', null);
-      
-      await this.bot.answerCallbackQuery(callbackQuery.id, { 
-        text: '✅ Заявка одобрена!' 
-      });
+      await this.processAbsenceDecision(absenceId, user, "approved", null);
 
+      await this.bot.answerCallbackQuery(callbackQuery.id, {
+        text: "✅ Заявка одобрена!",
+      });
     } catch (error) {
-      console.error('Ошибка в handleAbsenceManagement:', error);
-      await this.bot.answerCallbackQuery(callbackQuery.id, { 
-        text: '❌ Ошибка обработки', 
-        show_alert: true 
+      error("Ошибка в handleAbsenceManagement:", error);
+      await this.bot.answerCallbackQuery(callbackQuery.id, {
+        text: "❌ Ошибка обработки",
+        show_alert: true,
       });
     }
   }
@@ -1893,15 +2093,17 @@ class TimeBot {
   async processAbsenceDecision(absenceId, approver, decision, reason = null) {
     try {
       const absence = await Absence.findByPk(absenceId, {
-        include: [{
-          model: User,
-          as: 'user',
-          attributes: ['id', 'name', 'telegramId']
-        }]
+        include: [
+          {
+            model: User,
+            as: "user",
+            attributes: ["id", "name", "telegramId"],
+          },
+        ],
       });
 
       if (!absence) {
-        throw new Error('Заявка не найдена');
+        throw new Error("Заявка не найдена");
       }
 
       // Обновляем заявку
@@ -1909,38 +2111,37 @@ class TimeBot {
         status: decision,
         approvedBy: approver.id,
         approvedAt: new Date(),
-        rejectionReason: decision === 'rejected' ? reason : null
+        rejectionReason: decision === "rejected" ? reason : null,
       });
 
       // Если одобрена - создаём записи в work_logs
-      if (decision === 'approved') {
+      if (decision === "approved") {
         await this.createWorkLogsForAbsence(absence);
       }
 
       // Отправляем событие уведомления
-      emitEvent('absence.decision', {
+      emitEvent("absence.decision", {
         absence: absence,
         user: absence.user,
         decision,
         reason,
         approver,
-        timestamp: new Date()
+        timestamp: new Date(),
       });
 
       const typeText = {
-        'vacation': 'отпуск',
-        'sick': 'больничный',
-        'business_trip': 'командировку',
-        'day_off': 'отгул'
+        vacation: "отпуск",
+        sick: "больничный",
+        business_trip: "командировку",
+        day_off: "отгул",
       }[absence.type];
 
-      const statusText = decision === 'approved' ? 'одобрена' : 'отклонена';
-      const statusEmoji = decision === 'approved' ? '✅' : '❌';
+      const statusText = decision === "approved" ? "одобрена" : "отклонена";
+      const statusEmoji = decision === "approved" ? "✅" : "❌";
 
       return `${statusEmoji} Заявка на ${typeText} ${statusText}`;
-
     } catch (error) {
-      console.error('Ошибка обработки решения:', error);
+      error("Ошибка обработки решения:", error);
       throw error;
     }
   }
@@ -1950,55 +2151,59 @@ class TimeBot {
     const endDate = moment(absence.endDate);
     const workLogs = [];
 
-    let currentDate = startDate.clone();
+    const currentDate = startDate.clone();
     while (currentDate.isSameOrBefore(endDate)) {
       // Пропускаем выходные (суббота = 6, воскресенье = 0)
       if (currentDate.day() !== 0 && currentDate.day() !== 6) {
         workLogs.push({
           userId: absence.userId,
-          workDate: currentDate.format('YYYY-MM-DD'),
-          workMode: 'absent',
+          workDate: currentDate.format("YYYY-MM-DD"),
+          workMode: "absent",
           dailyReport: `${this.getAbsenceTypeText(absence.type)} (заявка #${absence.id})`,
           totalMinutes: 0,
           arrivedAt: null,
           leftAt: null,
           lunchStart: null,
-          lunchEnd: null
+          lunchEnd: null,
         });
       }
-      currentDate.add(1, 'day');
+      currentDate.add(1, "day");
     }
 
     if (workLogs.length > 0) {
       await WorkLog.bulkCreate(workLogs, {
-        updateOnDuplicate: ['workMode', 'dailyReport']
+        updateOnDuplicate: ["workMode", "dailyReport"],
       });
     }
   }
 
   getAbsenceTypeText(type) {
     const types = {
-      vacation: 'Отпуск',
-      sick: 'Больничный',
-      business_trip: 'Командировка',
-      day_off: 'Отгул'
+      vacation: "Отпуск",
+      sick: "Больничный",
+      business_trip: "Командировка",
+      day_off: "Отгул",
     };
     return types[type] || type;
   }
 
   async processAbsenceRejection(chatId, user, reason, absenceId) {
     try {
-      const result = await this.processAbsenceDecision(absenceId, user, 'rejected', reason);
-      
-      await this.bot.sendMessage(chatId,
-        `${result}\n\nПричина: ${reason}`,
-        { parse_mode: 'Markdown' }
+      const result = await this.processAbsenceDecision(
+        absenceId,
+        user,
+        "rejected",
+        reason,
       );
+
+      await this.bot.sendMessage(chatId, `${result}\n\nПричина: ${reason}`, {
+        parse_mode: "Markdown",
+      });
     } catch (error) {
-      console.error('Ошибка отклонения заявки:', error);
-      await this.bot.sendMessage(chatId, '❌ Ошибка при отклонении заявки');
+      error("Ошибка отклонения заявки:", error);
+      await this.bot.sendMessage(chatId, "❌ Ошибка при отклонении заявки");
     }
   }
 }
 
-module.exports = TimeBot; 
+module.exports = TimeBot;

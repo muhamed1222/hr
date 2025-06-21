@@ -1,9 +1,12 @@
-const express = require('express');
-const { Op } = require('sequelize');
-const moment = require('moment');
-const { User, Absence, Team, UserTeam, WorkLog } = require('../models');
-const { authenticateToken } = require('../middleware/auth');
-const checkAbsencePermissions = require('../middleware/absencePermissions');
+"use strict";
+
+const { _info, _error, _warn, _debug } = require("../utils/logger");
+
+const _express = require("express");
+const { Op } = require("sequelize");
+const _moment = require("moment");
+const { User, Team, UserTeam, WorkLog } = require("../models");
+const { authenticateToken } = require("../middleware/auth");
 
 const router = express.Router();
 
@@ -13,30 +16,30 @@ router.use(authenticateToken);
 /**
  * GET /api/schedule/month - Получить календарь на месяц
  */
-router.get('/month', checkAbsencePermissions.canViewSchedule, async (req, res) => {
+router.get("/month", async (req, res) => {
   try {
-    const { teamId, month = moment().format('YYYY-MM'), userId } = req.query;
+    const { teamId, month = moment().format("YYYY-MM"), userId } = req.query;
     const user = req.user;
 
     // Парсим месяц
-    const targetMonth = moment(month, 'YYYY-MM');
+    const targetMonth = moment(month, "YYYY-MM");
     if (!targetMonth.isValid()) {
-      return res.status(400).json({
+      return res.status(HTTP_STATUS_CODES.BAD_REQUEST).json({
         success: false,
-        message: 'Некорректный формат месяца (YYYY-MM)'
+        message: "Некорректный формат месяца (YYYY-MM)",
       });
     }
 
-    const startDate = targetMonth.clone().startOf('month').format('YYYY-MM-DD');
-    const endDate = targetMonth.clone().endOf('month').format('YYYY-MM-DD');
+    const startDate = targetMonth.clone().startOf("month").format("YYYY-MM-DD");
+    const endDate = targetMonth.clone().endOf("month").format("YYYY-MM-DD");
 
     // Определяем пользователей для отображения
-    let targetUsers = [];
-    
+    const _targetUsers = [];
+
     if (userId) {
       // Конкретный пользователь
       const targetUser = await User.findByPk(userId, {
-        attributes: ['id', 'name', 'username', 'role']
+        attributes: ["id", "name", "username", "role"],
       });
       if (targetUser) {
         targetUsers = [targetUser];
@@ -44,45 +47,50 @@ router.get('/month', checkAbsencePermissions.canViewSchedule, async (req, res) =
     } else if (teamId) {
       // Команда
       const team = await Team.findByPk(teamId, {
-        include: [{
-          model: User,
-          as: 'members',
-          attributes: ['id', 'name', 'username', 'role'],
-          through: { 
-            where: { status: 'active' },
-            attributes: [] 
-          }
-        }]
+        include: [
+          {
+            model: User,
+            as: "members",
+            attributes: ["id", "name", "username", "role"],
+            through: {
+              where: { status: "active" },
+              attributes: [],
+            },
+          },
+        ],
       });
-      
+
       if (team) {
         targetUsers = team.members;
       }
-    } else if (user.role === 'admin') {
+    } else if (user.role === "admin") {
       // Админ видит всех
       targetUsers = await User.findAll({
-        where: { status: 'active' },
-        attributes: ['id', 'name', 'username', 'role']
+        where: { status: "active" },
+        attributes: ["id", "name", "username", "role"],
       });
-    } else if (user.role === 'manager') {
+    } else if (user.role === "manager") {
       // Менеджер видит свои команды
       const managedTeams = await Team.findAll({
         where: { managerId: user.id },
-        include: [{
-          model: User,
-          as: 'members',
-          attributes: ['id', 'name', 'username', 'role'],
-          through: { 
-            where: { status: 'active' },
-            attributes: [] 
-          }
-        }]
+        include: [
+          {
+            model: User,
+            as: "members",
+            attributes: ["id", "name", "username", "role"],
+            through: {
+              where: { status: "active" },
+              attributes: [],
+            },
+          },
+        ],
       });
-      
-      targetUsers = managedTeams.flatMap(team => team.members);
+
+      targetUsers = managedTeams.flatMap((team) => team.members);
       // Убираем дубликаты
-      targetUsers = targetUsers.filter((user, index, self) => 
-        index === self.findIndex(u => u.id === user.id)
+      targetUsers = targetUsers.filter(
+        (user, index, self) =>
+          index === self.findIndex((u) => u.id === user.id),
       );
     } else {
       // Обычный сотрудник видит только себя
@@ -95,128 +103,94 @@ router.get('/month', checkAbsencePermissions.canViewSchedule, async (req, res) =
         data: {
           month: month,
           users: [],
-          calendar: {}
-        }
+          calendar: {},
+        },
       });
     }
 
-    const userIds = targetUsers.map(u => u.id);
-
-    // Получаем отсутствия за месяц
-    const absences = await Absence.findAll({
-      where: {
-        userId: { [Op.in]: userIds },
-        status: 'approved',
-        [Op.or]: [
-          {
-            startDate: { [Op.between]: [startDate, endDate] }
-          },
-          {
-            endDate: { [Op.between]: [startDate, endDate] }
-          },
-          {
-            [Op.and]: [
-              { startDate: { [Op.lte]: startDate } },
-              { endDate: { [Op.gte]: endDate } }
-            ]
-          }
-        ]
-      },
-      include: [{
-        model: User,
-        as: 'user',
-        attributes: ['id', 'name', 'username']
-      }]
-    });
+    const userIds = targetUsers.map((u) => u.id);
 
     // Получаем рабочие логи за месяц
     const workLogs = await WorkLog.findAll({
       where: {
         userId: { [Op.in]: userIds },
-        workDate: { [Op.between]: [startDate, endDate] }
+        workDate: { [Op.between]: [startDate, endDate] },
       },
-      include: [{
-        model: User,
-        as: 'user',
-        attributes: ['id', 'name', 'username']
-      }]
+      include: [
+        {
+          model: User,
+          as: "user",
+          attributes: ["id", "name", "username"],
+        },
+      ],
     });
 
     // Формируем календарь
     const calendar = {};
     const daysInMonth = targetMonth.daysInMonth();
 
-    for (let day = 1; day <= daysInMonth; day++) {
-      const currentDate = targetMonth.clone().date(day).format('YYYY-MM-DD');
+    for (let _day = 1; day <= daysInMonth; day++) {
+      const currentDate = targetMonth.clone().date(day).format("YYYY-MM-DD");
       const dayOfWeek = targetMonth.clone().date(day).day();
-      
+
       calendar[currentDate] = {
         date: currentDate,
         dayOfWeek: dayOfWeek,
         isWeekend: dayOfWeek === 0 || dayOfWeek === 6,
-        users: {}
+        users: {},
       };
 
       // Заполняем данные по пользователям
-      targetUsers.forEach(user => {
+      targetUsers.forEach((user) => {
         calendar[currentDate].users[user.id] = {
           user: {
             id: user.id,
             name: user.name,
-            username: user.username
+            username: user.username,
           },
-          status: 'not_worked',
+          status: "not_worked",
           absence: null,
-          workLog: null
+          workLog: null,
         };
 
-        // Проверяем отсутствие
-        const userAbsence = absences.find(abs => 
-          abs.userId === user.id && 
-          currentDate >= abs.startDate && 
-          currentDate <= abs.endDate
+        // Проверяем рабочий лог
+        const userWorkLog = workLogs.find(
+          (log) => log.userId === user.id && log.workDate === currentDate,
         );
 
-        if (userAbsence) {
-          calendar[currentDate].users[user.id].status = userAbsence.type;
-          calendar[currentDate].users[user.id].absence = {
-            id: userAbsence.id,
-            type: userAbsence.type,
-            reason: userAbsence.reason
+        if (userWorkLog) {
+          calendar[currentDate].users[user.id].workLog = {
+            id: userWorkLog.id,
+            arrivedAt: userWorkLog.arrivedAt,
+            leftAt: userWorkLog.leftAt,
+            workMode: userWorkLog.workMode,
+            totalMinutes: userWorkLog.totalMinutes,
           };
-        } else {
-          // Проверяем рабочий лог
-          const userWorkLog = workLogs.find(log => 
-            log.userId === user.id && log.workDate === currentDate
-          );
 
-          if (userWorkLog) {
-            calendar[currentDate].users[user.id].workLog = {
-              id: userWorkLog.id,
-              arrivedAt: userWorkLog.arrivedAt,
-              leftAt: userWorkLog.leftAt,
-              workMode: userWorkLog.workMode,
-              totalMinutes: userWorkLog.totalMinutes
-            };
-
-            if (userWorkLog.workMode === 'absent') {
-              calendar[currentDate].users[user.id].status = 'absent';
-            } else if (userWorkLog.arrivedAt && userWorkLog.leftAt) {
-              calendar[currentDate].users[user.id].status = 'worked';
-            } else if (userWorkLog.arrivedAt) {
-              calendar[currentDate].users[user.id].status = 'working';
-            } else {
-              calendar[currentDate].users[user.id].status = 'not_worked';
-            }
-          } else if (calendar[currentDate].isWeekend) {
-            calendar[currentDate].users[user.id].status = 'weekend';
+          if (
+            userWorkLog.workMode === "sick" ||
+            userWorkLog.workMode === "vacation"
+          ) {
+            calendar[currentDate].users[user.id].status = userWorkLog.workMode;
+          } else if (userWorkLog.arrivedAt && userWorkLog.leftAt) {
+            calendar[currentDate].users[user.id].status = "worked";
+          } else if (userWorkLog.arrivedAt) {
+            calendar[currentDate].users[user.id].status = "working";
+          } else {
+            calendar[currentDate].users[user.id].status = "not_worked";
           }
+        } else if (calendar[currentDate].isWeekend) {
+          calendar[currentDate].users[user.id].status = "weekend";
         }
       });
     }
 
     // Статистика за месяц
-    const statistics = calculateMonthStatistics(targetUsers, absences, workLogs, targetMonth);
+    const statistics = calculateMonthStatistics(
+      targetUsers,
+      workLogs,
+      targetMonth,
+    );
 
     res.json({
       success: true,
@@ -226,15 +200,14 @@ router.get('/month', checkAbsencePermissions.canViewSchedule, async (req, res) =
         endDate: endDate,
         users: targetUsers,
         calendar: calendar,
-        statistics: statistics
-      }
+        statistics: statistics,
+      },
     });
-
   } catch (error) {
-    console.error('Ошибка получения календаря:', error);
-    res.status(500).json({
+    _error("Ошибка получения календаря:", error);
+    res.status(LIMITS.DEFAULT_PAGE_SIZE0).json({
       success: false,
-      message: 'Ошибка получения календаря'
+      message: "Ошибка получения календаря",
     });
   }
 });
@@ -242,88 +215,62 @@ router.get('/month', checkAbsencePermissions.canViewSchedule, async (req, res) =
 /**
  * GET /api/schedule/user/:id - Получить расписание конкретного пользователя
  */
-router.get('/user/:id', async (req, res) => {
+router.get("/user/:id", async (req, res) => {
   try {
     const { id } = req.params;
     const { startDate, endDate } = req.query;
     const currentUser = req.user;
 
     // Проверка доступа
-    if (currentUser.role === 'employee' && parseInt(id) !== currentUser.id) {
-      return res.status(403).json({
+    if (currentUser.role === "employee" && parseInt(id) !== currentUser.id) {
+      return res.status(HTTP_STATUS_CODES.FORBIDDEN).json({
         success: false,
-        message: 'Доступ запрещен'
+        message: "Доступ запрещен",
       });
     }
 
     const targetUser = await User.findByPk(id, {
-      attributes: ['id', 'name', 'username', 'role', 'vacationDays']
+      attributes: ["id", "name", "username", "role", "vacationDays"],
     });
 
     if (!targetUser) {
-      return res.status(404).json({
+      return res.status(HTTP_STATUS_CODES.NOT_FOUND).json({
         success: false,
-        message: 'Пользователь не найден'
+        message: "Пользователь не найден",
       });
     }
 
     // Проверка для менеджера
-    if (currentUser.role === 'manager') {
+    if (currentUser.role === "manager") {
       const userTeams = await UserTeam.findAll({
         where: { userId: id },
-        include: [{
-          model: Team,
-          as: 'team',
-          where: { managerId: currentUser.id }
-        }]
+        include: [
+          {
+            model: Team,
+            as: "team",
+            where: { managerId: currentUser.id },
+          },
+        ],
       });
-      
+
       if (userTeams.length === 0) {
-        return res.status(403).json({
+        return res.status(HTTP_STATUS_CODES.FORBIDDEN).json({
           success: false,
-          message: 'Доступ запрещен'
+          message: "Доступ запрещен",
         });
       }
     }
 
-    const start = startDate || moment().startOf('month').format('YYYY-MM-DD');
-    const end = endDate || moment().endOf('month').format('YYYY-MM-DD');
-
-    // Получаем отсутствия
-    const absences = await Absence.findAll({
-      where: {
-        userId: id,
-        [Op.or]: [
-          {
-            startDate: { [Op.between]: [start, end] }
-          },
-          {
-            endDate: { [Op.between]: [start, end] }
-          },
-          {
-            [Op.and]: [
-              { startDate: { [Op.lte]: start } },
-              { endDate: { [Op.gte]: end } }
-            ]
-          }
-        ]
-      },
-      include: [{
-        model: User,
-        as: 'approver',
-        attributes: ['id', 'name', 'username'],
-        required: false
-      }],
-      order: [['startDate', 'ASC']]
-    });
+    const start = startDate || moment().startOf("month").format("YYYY-MM-DD");
+    const end = endDate || moment().endOf("month").format("YYYY-MM-DD");
 
     // Получаем рабочие логи
     const workLogs = await WorkLog.findAll({
       where: {
         userId: id,
-        workDate: { [Op.between]: [start, end] }
+        workDate: { [Op.between]: [start, end] },
       },
-      order: [['workDate', 'ASC']]
+      order: [["workDate", "ASC"]],
     });
 
     res.json({
@@ -331,17 +278,15 @@ router.get('/user/:id', async (req, res) => {
       data: {
         user: targetUser,
         period: { startDate: start, endDate: end },
-        absences: absences,
         workLogs: workLogs,
-        statistics: calculateUserStatistics(absences, workLogs, start, end)
-      }
+        statistics: calculateUserStatistics(workLogs, start, end),
+      },
     });
-
   } catch (error) {
-    console.error('Ошибка получения расписания пользователя:', error);
-    res.status(500).json({
+    _error("Ошибка получения расписания пользователя:", error);
+    res.status(LIMITS.DEFAULT_PAGE_SIZE0).json({
       success: false,
-      message: 'Ошибка получения расписания'
+      message: "Ошибка получения расписания",
     });
   }
 });
@@ -349,74 +294,78 @@ router.get('/user/:id', async (req, res) => {
 /**
  * GET /api/schedule/upcoming - Получить ближайшие отсутствия
  */
-router.get('/upcoming', async (req, res) => {
+router.get("/upcoming", async (req, res) => {
   try {
     const { teamId, days = 30 } = req.query;
     const user = req.user;
 
-    const startDate = moment().format('YYYY-MM-DD');
-    const endDate = moment().add(parseInt(days), 'days').format('YYYY-MM-DD');
+    const startDate = moment().format("YYYY-MM-DD");
+    const endDate = moment().add(parseInt(days), "days").format("YYYY-MM-DD");
 
-    let whereClause = {
-      status: 'approved',
-      startDate: { [Op.between]: [startDate, endDate] }
+    const whereClause = {
+      workDate: { [Op.between]: [startDate, endDate] },
     };
 
-    let includeClause = [{
-      model: User,
-      as: 'user',
-      attributes: ['id', 'name', 'username', 'role']
-    }];
+    const includeClause = [
+      {
+        model: User,
+        as: "user",
+        attributes: ["id", "name", "username", "role"],
+      },
+    ];
 
     // Фильтрация по ролям
-    if (user.role === 'employee') {
+    if (user.role === "employee") {
       whereClause.userId = user.id;
-    } else if (user.role === 'manager') {
+    } else if (user.role === "manager") {
       if (teamId) {
         // Конкретная команда
         const team = await Team.findByPk(teamId);
         if (!team || team.managerId !== user.id) {
-          return res.status(403).json({
+          return res.status(HTTP_STATUS_CODES.FORBIDDEN).json({
             success: false,
-            message: 'Нет доступа к данной команде'
+            message: "Нет доступа к данной команде",
           });
         }
-        
-        includeClause[0].include = [{
-          model: Team,
-          as: 'teams',
-          where: { id: teamId },
-          through: { attributes: [] }
-        }];
+
+        includeClause[0].include = [
+          {
+            model: Team,
+            as: "teams",
+            where: { id: teamId },
+            through: { attributes: [] },
+          },
+        ];
       } else {
         // Все команды менеджера
-        includeClause[0].include = [{
-          model: Team,
-          as: 'teams',
-          where: { managerId: user.id },
-          through: { attributes: [] }
-        }];
+        includeClause[0].include = [
+          {
+            model: Team,
+            as: "teams",
+            where: { managerId: user.id },
+            through: { attributes: [] },
+          },
+        ];
       }
     }
     // Админы видят все (без дополнительных фильтров)
 
-    const upcomingAbsences = await Absence.findAll({
+    const upcomingWorkLogs = await WorkLog.findAll({
       where: whereClause,
       include: includeClause,
-      order: [['startDate', 'ASC']],
-      limit: 50
+      order: [["workDate", "ASC"]],
+      limit: LIMITS.DEFAULT_PAGE_SIZE,
     });
 
     res.json({
       success: true,
-      data: upcomingAbsences
+      data: upcomingWorkLogs,
     });
-
   } catch (error) {
-    console.error('Ошибка получения ближайших отсутствий:', error);
-    res.status(500).json({
+    _error("Ошибка получения ближайших отсутствий:", error);
+    res.status(LIMITS.DEFAULT_PAGE_SIZE0).json({
       success: false,
-      message: 'Ошибка получения данных'
+      message: "Ошибка получения данных",
     });
   }
 });
@@ -425,86 +374,129 @@ router.get('/upcoming', async (req, res) => {
  * Вспомогательные функции
  */
 
-function calculateMonthStatistics(users, absences, workLogs, targetMonth) {
-  const stats = {
+function calculateMonthStatistics(users, workLogs, targetMonth) {
+  const monthStats = {
     totalUsers: users.length,
-    totalAbsences: absences.length,
-    absencesByType: {
-      vacation: 0,
-      sick: 0,
-      business_trip: 0,
-      day_off: 0
-    },
-    workingDays: 0,
-    weekends: 0,
-    totalWorkingMinutes: 0
+    totalWorkDays: 0,
+    totalWorkedHours: 0,
+    averageHoursPerDay: 0,
+    remoteDays: 0,
+    officeDays: 0,
+    sickDays: 0,
+    vacationDays: 0,
+    userStats: {},
   };
 
-  // Подсчет рабочих дней и выходных
-  const daysInMonth = targetMonth.daysInMonth();
-  for (let day = 1; day <= daysInMonth; day++) {
-    const dayOfWeek = targetMonth.clone().date(day).day();
-    if (dayOfWeek === 0 || dayOfWeek === 6) {
-      stats.weekends++;
-    } else {
-      stats.workingDays++;
+  const startDate = targetMonth.clone().startOf("month");
+  const endDate = targetMonth.clone().endOf("month");
+
+  // Подсчет рабочих дней в месяце (без выходных)
+  const _workDaysInMonth = 0;
+  for (let _m = startDate.clone(); m.isSameOrBefore(endDate); m.add(1, "days")) {
+    if (m.day() !== 0 && m.day() !== 6) {
+      workDaysInMonth++;
+    }
+  }
+  monthStats.totalWorkDays = workDaysInMonth * users.length;
+
+  users.forEach((user) => {
+    const userWorkLogs = workLogs.filter((log) => log.userId === user.id);
+
+    const workedDays = userWorkLogs.filter(
+      (log) => log.workMode === "office" || log.workMode === "remote",
+    ).length;
+    const remote = userWorkLogs.filter(
+      (log) => log.workMode === "remote",
+    ).length;
+    const office = userWorkLogs.filter(
+      (log) => log.workMode === "office",
+    ).length;
+    const sick = userWorkLogs.filter((log) => log.workMode === "sick").length;
+    const vacation = userWorkLogs.filter(
+      (log) => log.workMode === "vacation",
+    ).length;
+    const totalHours =
+      userWorkLogs.reduce((sum, log) => sum + (log.totalMinutes || 0), 0) / 60;
+
+    monthStats.remoteDays += remote;
+    monthStats.officeDays += office;
+    monthStats.sickDays += sick;
+    monthStats.vacationDays += vacation;
+    monthStats.totalWorkedHours += totalHours;
+
+    monthStats.userStats[user.id] = {
+      userId: user.id,
+      name: user.name,
+      workedDays,
+      expectedWorkDays: workDaysInMonth,
+      remoteDays: remote,
+      officeDays: office,
+      sickDays: sick,
+      vacationDays: vacation,
+      totalHours: parseFloat(totalHours.toFixed(2)),
+      completeness:
+        workDaysInMonth > 0
+          ? Math.round((workedDays / workDaysInMonth) * LIMITS.MAX_PAGE_SIZE)
+          : 0,
+    };
+  });
+
+  if (monthStats.totalWorkDays > 0) {
+    const totalWorkedDaysAllUsers = Object.values(monthStats.userStats).reduce(
+      (sum, stat) => sum + stat.workedDays,
+      0,
+    );
+    monthStats.averageHoursPerDay =
+      totalWorkedDaysAllUsers > 0
+        ? parseFloat(
+            (monthStats.totalWorkedHours / totalWorkedDaysAllUsers).toFixed(2),
+          )
+        : 0;
+  }
+
+  return monthStats;
+}
+
+function calculateUserStatistics(workLogs, startDate, endDate) {
+  const start = moment(startDate);
+  const end = moment(endDate);
+  const _totalWorkDays = 0;
+
+  for (let _m = start.clone(); m.isSameOrBefore(end); m.add(1, "days")) {
+    if (m.day() !== 0 && m.day() !== 6) {
+      totalWorkDays++;
     }
   }
 
-  // Подсчет отсутствий по типам
-  absences.forEach(absence => {
-    if (stats.absencesByType[absence.type] !== undefined) {
-      stats.absencesByType[absence.type]++;
-    }
-  });
+  const workedDays = workLogs.filter(
+    (log) => log.workMode === "office" || log.workMode === "remote",
+  ).length;
+  const remoteDays = workLogs.filter((log) => log.workMode === "remote").length;
+  const officeDays = workLogs.filter((log) => log.workMode === "office").length;
+  const sickDays = workLogs.filter((log) => log.workMode === "sick").length;
+  const vacationDays = workLogs.filter(
+    (log) => log.workMode === "vacation",
+  ).length;
 
-  // Подсчет рабочих минут
-  stats.totalWorkingMinutes = workLogs.reduce((total, log) => {
-    return total + (log.totalMinutes || 0);
-  }, 0);
+  const totalMinutes = workLogs.reduce(
+    (sum, log) => sum + (log.totalMinutes || 0),
+    0,
+  );
+  const totalHours = totalMinutes / 60;
 
-  return stats;
-}
-
-function calculateUserStatistics(absences, workLogs, startDate, endDate) {
-  const stats = {
-    totalAbsences: absences.length,
-    totalAbsenceDays: 0,
-    absencesByType: {
-      vacation: 0,
-      sick: 0,
-      business_trip: 0,
-      day_off: 0
-    },
-    totalWorkingMinutes: 0,
-    averageWorkingHours: 0,
-    workingDays: 0
+  return {
+    workedDays,
+    remoteDays,
+    officeDays,
+    sickDays,
+    vacationDays,
+    totalWorkDays,
+    totalHours: parseFloat(totalHours.toFixed(2)),
+    completeness:
+      totalWorkDays > 0
+        ? Math.round((workedDays / totalWorkDays) * LIMITS.MAX_PAGE_SIZE)
+        : 0,
   };
-
-  // Подсчет дней отсутствия
-  absences.forEach(absence => {
-    if (absence.status === 'approved') {
-      stats.totalAbsenceDays += absence.daysCount;
-      if (stats.absencesByType[absence.type] !== undefined) {
-        stats.absencesByType[absence.type] += absence.daysCount;
-      }
-    }
-  });
-
-  // Подсчет рабочих минут
-  workLogs.forEach(log => {
-    if (log.totalMinutes > 0) {
-      stats.totalWorkingMinutes += log.totalMinutes;
-      stats.workingDays++;
-    }
-  });
-
-  // Средние часы в день
-  if (stats.workingDays > 0) {
-    stats.averageWorkingHours = Math.round((stats.totalWorkingMinutes / stats.workingDays / 60) * 100) / 100;
-  }
-
-  return stats;
 }
 
-module.exports = router; 
+module.exports = router;

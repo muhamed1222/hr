@@ -311,12 +311,21 @@
 <a name='L246'></a><a href='#L246'>246</a>
 <a name='L247'></a><a href='#L247'>247</a>
 <a name='L248'></a><a href='#L248'>248</a>
-<a name='L249'></a><a href='#L249'>249</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L249'></a><a href='#L249'>249</a>
+<a name='L250'></a><a href='#L250'>250</a>
+<a name='L251'></a><a href='#L251'>251</a>
+<a name='L252'></a><a href='#L252'>252</a>
+<a name='L253'></a><a href='#L253'>253</a>
+<a name='L254'></a><a href='#L254'>254</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -348,8 +357,8 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -559,7 +568,12 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">/**
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">"use strict";
+&nbsp;
+const { info, error, warn, debug } = <span class="cstat-no" title="statement not covered" >require("../utils/logger");</span>
+&nbsp;
+/**
  * Сервис кэширования
  * Поддерживает как in-memory кэш, так и Redis
  */
@@ -568,7 +582,7 @@ class CacheService {
 <span class="cstat-no" title="statement not covered" >    this.inMemoryCache = new Map();</span>
 <span class="cstat-no" title="statement not covered" >    this.redis = null;</span>
 <span class="cstat-no" title="statement not covered" >    this.isRedisAvailable = false;</span>
-    
+&nbsp;
 <span class="cstat-no" title="statement not covered" >    this._initializeRedis();</span>
   }
 &nbsp;
@@ -578,33 +592,33 @@ class CacheService {
 <span class="fstat-no" title="function not covered" >  as</span>ync _initializeRedis() {
 <span class="cstat-no" title="statement not covered" >    try {</span>
 <span class="cstat-no" title="statement not covered" >      if (process.env.REDIS_URL || process.env.REDIS_HOST) {</span>
-        const redis = <span class="cstat-no" title="statement not covered" >require('redis');</span>
-        
+        const _redis = <span class="cstat-no" title="statement not covered" >require("redis");</span>
+&nbsp;
         const redisConfig = <span class="cstat-no" title="statement not covered" >{</span>
           url: process.env.REDIS_URL,
-          host: process.env.REDIS_HOST || 'localhost',
+          host: process.env.REDIS_HOST || "localhost",
           port: process.env.REDIS_PORT || 6379,
           password: process.env.REDIS_PASSWORD,
-          retryDelayOnFailover: 100,
-          maxRetriesPerRequest: 3
+          retryDelayOnFailover: LIMITS.MAX_PAGE_SIZE,
+          maxRetriesPerRequest: 3,
         };
 &nbsp;
 <span class="cstat-no" title="statement not covered" >        this.redis = redis.createClient(redisConfig);</span>
-        
-<span class="cstat-no" title="statement not covered" >        this.redis.on('error', <span class="fstat-no" title="function not covered" >(e</span>rr) =&gt; {</span>
-<span class="cstat-no" title="statement not covered" >          console.warn('Redis недоступен, используется in-memory кэш:', err.message);</span>
+&nbsp;
+<span class="cstat-no" title="statement not covered" >        this.redis.on("error", <span class="fstat-no" title="function not covered" >(e</span>rr) =&gt; {</span>
+<span class="cstat-no" title="statement not covered" >          warn("Redis недоступен, используется in-memory кэш:", err.message);</span>
 <span class="cstat-no" title="statement not covered" >          this.isRedisAvailable = false;</span>
         });
 &nbsp;
-<span class="cstat-no" title="statement not covered" >        this.redis.on('connect', <span class="fstat-no" title="function not covered" >()</span> =&gt; {</span>
-<span class="cstat-no" title="statement not covered" >          console.log('✅ Redis подключен для кэширования');</span>
+<span class="cstat-no" title="statement not covered" >        this.redis.on("connect", <span class="fstat-no" title="function not covered" >()</span> =&gt; {</span>
+          // // info('✅ Redis подключен для кэширования');
 <span class="cstat-no" title="statement not covered" >          this.isRedisAvailable = true;</span>
         });
 &nbsp;
 <span class="cstat-no" title="statement not covered" >        await this.redis.connect();</span>
       }
     } catch (error) {
-<span class="cstat-no" title="statement not covered" >      console.warn('Redis недоступен, используется in-memory кэш:', error.message);</span>
+<span class="cstat-no" title="statement not covered" >      warn("Redis недоступен, используется in-memory кэш:", error.message);</span>
 <span class="cstat-no" title="statement not covered" >      this.isRedisAvailable = false;</span>
     }
   }
@@ -630,7 +644,7 @@ class CacheService {
 <span class="cstat-no" title="statement not covered" >        return null;</span>
       }
     } catch (error) {
-<span class="cstat-no" title="statement not covered" >      console.error('Ошибка получения из кэша:', error);</span>
+<span class="cstat-no" title="statement not covered" >      error("Ошибка получения из кэша:", error);</span>
 <span class="cstat-no" title="statement not covered" >      return null;</span>
     }
   }
@@ -649,14 +663,14 @@ class CacheService {
         // Fallback к in-memory кэшу
 <span class="cstat-no" title="statement not covered" >        this.inMemoryCache.set(key, {</span>
           value,
-          expires: Date.now() + (ttl * 1000)
+          expires: Date.now() + ttl * LIMITS.MAX_PAGE_SIZE0,
         });
-        
+&nbsp;
         // Очистка истекших записей
 <span class="cstat-no" title="statement not covered" >        this._cleanupInMemoryCache();</span>
       }
     } catch (error) {
-<span class="cstat-no" title="statement not covered" >      console.error('Ошибка сохранения в кэш:', error);</span>
+<span class="cstat-no" title="statement not covered" >      error("Ошибка сохранения в кэш:", error);</span>
     }
   }
 &nbsp;
@@ -672,7 +686,7 @@ class CacheService {
 <span class="cstat-no" title="statement not covered" >        this.inMemoryCache.delete(key);</span>
       }
     } catch (error) {
-<span class="cstat-no" title="statement not covered" >      console.error('Ошибка удаления из кэша:', error);</span>
+<span class="cstat-no" title="statement not covered" >      error("Ошибка удаления из кэша:", error);</span>
     }
   }
 &nbsp;
@@ -687,7 +701,7 @@ class CacheService {
 <span class="cstat-no" title="statement not covered" >        this.inMemoryCache.clear();</span>
       }
     } catch (error) {
-<span class="cstat-no" title="statement not covered" >      console.error('Ошибка очистки кэша:', error);</span>
+<span class="cstat-no" title="statement not covered" >      error("Ошибка очистки кэша:", error);</span>
     }
   }
 &nbsp;
@@ -699,15 +713,15 @@ class CacheService {
    * @returns {Promise&lt;any&gt;}
    */
 <span class="fstat-no" title="function not covered" >  as</span>ync getOrSet(key, fetchFunction, ttl = <span class="branch-0 cbranch-no" title="branch not covered" >300)</span> {
-    let value = <span class="cstat-no" title="statement not covered" >await this.get(key);</span>
-    
+    const _value = <span class="cstat-no" title="statement not covered" >await this.get(key);</span>
+&nbsp;
 <span class="cstat-no" title="statement not covered" >    if (value === null) {</span>
 <span class="cstat-no" title="statement not covered" >      value = await fetchFunction();</span>
 <span class="cstat-no" title="statement not covered" >      if (value !== null &amp;&amp; value !== undefined) {</span>
 <span class="cstat-no" title="statement not covered" >        await this.set(key, value, ttl);</span>
       }
     }
-    
+&nbsp;
 <span class="cstat-no" title="statement not covered" >    return value;</span>
   }
 &nbsp;
@@ -738,7 +752,7 @@ class CacheService {
         }
       } else {
         // Для in-memory кэша используем простой поиск
-        const regex = <span class="cstat-no" title="statement not covered" >new RegExp(pattern.replace('*', '.*'));</span>
+        const regex = <span class="cstat-no" title="statement not covered" >new RegExp(pattern.replace("*", ".*"));</span>
 <span class="cstat-no" title="statement not covered" >        for (const key of this.inMemoryCache.keys()) {</span>
 <span class="cstat-no" title="statement not covered" >          if (regex.test(key)) {</span>
 <span class="cstat-no" title="statement not covered" >            this.inMemoryCache.delete(key);</span>
@@ -746,7 +760,7 @@ class CacheService {
         }
       }
     } catch (error) {
-<span class="cstat-no" title="statement not covered" >      console.error('Ошибка инвалидации кэша:', error);</span>
+<span class="cstat-no" title="statement not covered" >      error("Ошибка инвалидации кэша:", error);</span>
     }
   }
 &nbsp;
@@ -756,25 +770,25 @@ class CacheService {
 <span class="fstat-no" title="function not covered" >  as</span>ync getStats() {
 <span class="cstat-no" title="statement not covered" >    try {</span>
 <span class="cstat-no" title="statement not covered" >      if (this.isRedisAvailable &amp;&amp; this.redis) {</span>
-        const info = <span class="cstat-no" title="statement not covered" >await this.redis.info('memory');</span>
+        const info = <span class="cstat-no" title="statement not covered" >await this.redis.info("memory");</span>
 <span class="cstat-no" title="statement not covered" >        return {</span>
-          type: 'redis',
+          type: "redis",
           available: true,
-          info: info
+          info: info,
         };
       } else {
 <span class="cstat-no" title="statement not covered" >        return {</span>
-          type: 'memory',
+          type: "memory",
           available: true,
           size: this.inMemoryCache.size,
-          keys: Array.from(this.inMemoryCache.keys())
+          keys: Array.from(this.inMemoryCache.keys()),
         };
       }
     } catch (error) {
 <span class="cstat-no" title="statement not covered" >      return {</span>
-        type: 'unknown',
+        type: "unknown",
         available: false,
-        error: error.message
+        error: error.message,
       };
     }
   }
@@ -802,19 +816,20 @@ class CacheService {
       }
 <span class="cstat-no" title="statement not covered" >      this.inMemoryCache.clear();</span>
     } catch (error) {
-<span class="cstat-no" title="statement not covered" >      console.error('Ошибка закрытия кэша:', error);</span>
+<span class="cstat-no" title="statement not covered" >      error("Ошибка закрытия кэша:", error);</span>
     }
   }
 }
 &nbsp;
-<span class="cstat-no" title="statement not covered" >module.exports = new CacheService(); </span></pre></td></tr></table></pre>
+<span class="cstat-no" title="statement not covered" >module.exports = new CacheService();</span>
+&nbsp;</pre></td></tr></table></pre>
 
                 <div class='push'></div><!-- for sticky footer -->
             </div><!-- /wrapper -->
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-06-18T23:44:35.441Z
+                at 2025-06-20T21:30:51.682Z
             </div>
         <script src="../prettify.js"></script>
         <script>
